@@ -143,9 +143,13 @@ export default function TeacherDashboard() {
     });
     if (!confirmed) return;
 
-    const next = deleteSubmissionById(id);
-    setSubmissions(next);
-    toast.success('Đã xóa bài nộp');
+    try {
+      await fetch(`/api/submissions/${id}`, { method: 'DELETE' });
+      setSubmissions(submissions.filter((s) => s.id !== id));
+      toast.success('Đã xóa bài nộp');
+    } catch {
+      toast.error('Lỗi', 'Không thể xóa bài nộp.');
+    }
   };
 
   const handleClearAllSubmissions = async () => {
@@ -161,10 +165,14 @@ export default function TeacherDashboard() {
     });
     if (!confirmed) return;
 
-    const next = clearSubmissions();
-    setSubmissions(next);
-    setGradingSubmission(null);
-    toast.success('Đã xóa toàn bộ kết quả', 'Bộ nhớ trình duyệt đã được giải phóng.');
+    try {
+      await fetch('/api/submissions/clear', { method: 'DELETE' });
+      setSubmissions([]);
+      setGradingSubmission(null);
+      toast.success('Đã xóa toàn bộ kết quả', 'Bộ nhớ đã được giải phóng.');
+    } catch {
+      toast.error('Lỗi', 'Không thể xóa toàn bộ bài nộp.');
+    }
   };
 
   const handleExportCsv = () => {
@@ -176,11 +184,23 @@ export default function TeacherDashboard() {
     toast.success('Đã xuất bảng điểm', `Tệp CSV gồm ${submissions.length} bài nộp.`);
   };
 
-  const handleSaveGrading = (updated: Submission) => {
-    const next = updateSubmission(updated);
-    setSubmissions(next);
-    setGradingSubmission(null);
-    toast.success('Đã lưu điểm', `${updated.studentName}: ${formatNumber(updated.score)} điểm.`);
+  const handleSaveGrading = async (updated: Submission) => {
+    try {
+      await fetch(`/api/submissions/${updated.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          score: updated.score,
+          status: updated.status,
+          essayDetails: updated.essayDetails,
+        }),
+      });
+      setSubmissions(submissions.map((s) => (s.id === updated.id ? updated : s)));
+      setGradingSubmission(null);
+      toast.success('Đã lưu điểm', `${updated.studentName}: ${formatNumber(updated.score)} điểm.`);
+    } catch {
+      toast.error('Lỗi', 'Không thể lưu điểm.');
+    }
   };
 
   const handleLogout = () => {
@@ -366,7 +386,6 @@ export default function TeacherDashboard() {
 
           {activeTab === 'submissions' ? (
             <SubmissionsTab
-              submissions={submissions}
               onGrade={(submission) => setGradingSubmission(submission)}
               onDelete={handleDeleteSubmission}
               onClearAll={handleClearAllSubmissions}

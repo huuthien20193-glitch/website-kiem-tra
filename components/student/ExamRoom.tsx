@@ -110,13 +110,23 @@ export function ExamRoom({
     });
   }, [draftKey, essayImages, mcqAnswers, practiceMode]);
 
-  const submit = (auto = false) => {
+  const submit = async (auto = false) => {
     if (submittedRef.current) return;
     submittedRef.current = true;
     const submission = buildSubmission(exam, studentName, studentClass, answersRef.current, imagesRef.current);
     clearDraft(draftKey);
     if (auto) {
       toast.warning('Hết giờ làm bài', 'Hệ thống đã tự động nộp bài làm của bạn.');
+    }
+    // Gửi bài nộp lên API chung để giáo viên thấy
+    try {
+      await fetch('/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submission),
+      });
+    } catch {
+      toast.warning('Lưu bài nộp', 'Không thể gửi bài nộp lên server. Dữ liệu đã lưu cục bộ.');
     }
     onSubmitted(submission);
   };

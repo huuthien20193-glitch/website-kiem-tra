@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Award,
   CheckCircle2,
@@ -17,7 +17,6 @@ import { cn, formatNumber, initials, isPending } from '@/lib/utils';
 type StatusFilter = 'all' | 'pending' | 'done';
 
 type SubmissionsTabProps = {
-  submissions: Submission[];
   onGrade: (submission: Submission) => void;
   onDelete: (id: string) => void;
   onClearAll: () => void;
@@ -40,14 +39,32 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function SubmissionsTab({
-  submissions,
   onGrade,
   onDelete,
   onClearAll,
   onExport,
 }: SubmissionsTabProps) {
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+
+  useEffect(() => {
+    async function loadSubmissions() {
+      try {
+        const res = await fetch('/api/submissions');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data)) {
+          setSubmissions(data.data);
+        }
+      } catch {
+        // Bỏ qua lỗi load
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadSubmissions();
+  }, []);
 
   const pendingCount = submissions.filter((submission) => isPending(submission.status)).length;
   const gradedCount = submissions.length - pendingCount;
