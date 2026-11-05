@@ -1,0 +1,315 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { Award, CheckCircle2, CircleX, Save, X, ZoomIn } from 'lucide-react';
+import type { Submission } from '@/lib/types';
+import { OPTION_LABELS } from '@/lib/types';
+import { cn, formatNumber, initials, round1 } from '@/lib/utils';
+
+type GradingModalProps = {
+  submission: Submission;
+  onClose: () => void;
+  onSave: (updated: Submission) => void;
+};
+
+type ScoreState = Record<string, { score: number; comment: string }>;
+
+export function GradingModal({ submission, onClose, onSave }: GradingModalProps) {
+  const [scores, setScores] = useState<ScoreState>(() => {
+    const initial: ScoreState = {};
+    submission.essayDetails.forEach((detail) => {
+      initial[String(detail.questionId)] = {
+        score: detail.score || 0,
+        comment: detail.comment || '',
+      };
+    });
+    return initial;
+  });
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (previewImage) setPreviewImage(null);
+        else onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onClose, previewImage]);
+
+  const essayTotal = useMemo(
+    () =>
+      round1(
+        submission.essayDetails.reduce((sum, detail) => {
+          const value = scores[String(detail.questionId)]?.score ?? detail.score ?? 0;
+          return sum + Math.min(detail.maxPoints, Math.max(0, value));
+        }, 0),
+      ),
+    [scores, submission.essayDetails],
+  );
+
+  const finalTotal = round1((submission.autoScore || 0) + essayTotal);
+
+  const updateScore = (questionId: string | number, rawValue: string, maxPoints: number) => {
+    const parsed = Number(rawValue);
+    const value = Number.isFinite(parsed) ? Math.min(maxPoints, Math.max(0, parsed)) : 0;
+    setScores((current) => ({
+      ...current,
+      [String(questionId)]: { score: value, comment: current[String(questionId)]?.comment || '' },
+    }));
+  };
+
+  const updateComment = (questionId: string | number, comment: string) => {
+    setScores((current) => ({
+      ...current,
+      [String(questionId)]: { score: current[String(questionId)]?.score ?? 0, comment },
+    }));
+  };
+
+  const handleSave = () => {
+    const essayDetails = submission.essayDetails.map((detail) => {
+      const graded = scores[String(detail.questionId)];
+      return {
+        ...detail,
+        score: Math.min(detail.maxPoints, Math.max(0, graded?.score ?? detail.score ?? 0)),
+        comment: graded?.comment ?? detail.comment,
+        graded: true,
+      };
+    });
+    const total = round1((submission.autoScore || 0) + essayDetails.reduce((sum, detail) => sum + detail.score, 0));
+    onSave({
+      ...submission,
+      essayDetails,
+      score: total,
+      status: 'Đã chấm điểm hoàn tất',
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6">
+      <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl animate-pop-in">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-white px-5 py-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 text-xs font-black text-white">
+              {initials(submission.studentName)}
+            </span>
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-black text-slate-900">
+                {submission.studentName} <span className="font-semibold text-slate-400">({submission.studentClass})</span>
+              </h2>
+              <p className="truncate text-[11px] font-medium text-slate-400">{submission.examTitle}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 p-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600"
+            aria-label="Đóng"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-5 overflow-y-auto bg-slate-50/60 p-4 sm:p-6">
+          <div className="rounded-2xl border border-emerald-200 bg-white p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-xs font-black uppercase tracking-wide text-emerald-800">
+                Phần 1 · Trắc nghiệm
+              </h3>
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700">
+                {submission.mcqCorrectCount}/{submission.mcqCount} câu đúng · {formatNumber(submission.autoScore)}đ
+              </span>
+            </div>
+
+            {submission.correctMcqAnswers.length > 0 ? (
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                {submission.correctMcqAnswers.map((correctOption, index) => {
+                  const studentOption = submission.studentMcqAnswers[index];
+                  const isCorrect = studentOption === correctOption;
+                  return (
+                    <div
+                      key={index}
+                      className={cn(
+                        'rounded-xl border p-2.5 text-center',
+                        isCorrect ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50',
+                      )}
+                    >
+                      <p className={cn('text-[10px] font-black uppercase', isCorrect ? 'text-emerald-700' : 'text-rose-600')}>
+                        Câu {index + 1}
+                      </p>
+                      <p className="mt-1 flex items-center justify-center gap-1 text-xs font-bold text-slate-800">
+                        {isCorrect ? (
+                          <CheckCircle2 className="size-3.5 text-emerald-600" />
+                        ) : (
+                          <CircleX className="size-3.5 text-rose-500" />
+                        )}
+                        {studentOption !== undefined ? OPTION_LABELS[studentOption] : '—'}
+                      </p>
+                      {!isCorrect ? (
+                        <p className="text-[10px] font-semibold text-slate-500">
+                          Đúng: <span className="font-black text-emerald-700">{OPTION_LABELS[correctOption]}</span>
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs font-medium text-slate-400">Bài thi không có phần trắc nghiệm.</p>
+            )}
+          </div>
+
+          {submission.essayDetails.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+              <Award className="mx-auto size-8 text-slate-300" />
+              <p className="mt-2 text-sm font-bold text-slate-700">Bài thi chỉ có phần trắc nghiệm</p>
+              <p className="mt-1 text-xs text-slate-400">Nhấn &quot;Hoàn tất chấm bài&quot; để xác nhận kết quả.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <h3 className="text-xs font-black uppercase tracking-wide text-slate-600">
+                Phần 2 · Tự luận ({submission.essayDetails.length} câu)
+              </h3>
+
+              {submission.essayDetails.map((detail, index) => (
+                <div key={`${detail.questionId}-${index}`} className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="flex size-7 items-center justify-center rounded-lg bg-emerald-100 text-[11px] font-black text-emerald-700">
+                        {index + 1}
+                      </span>
+                      <h4 className="text-sm font-black text-slate-900">{detail.questionLabel}</h4>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
+                        Tối đa {formatNumber(detail.maxPoints)}đ
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-bold text-slate-400">
+                      Điểm đã cho: <span className="text-emerald-600">{formatNumber(scores[String(detail.questionId)]?.score ?? 0)}đ</span>
+                    </span>
+                  </div>
+
+                  {detail.questionContent ? (
+                    <p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-slate-600">
+                      {detail.questionContent}
+                    </p>
+                  ) : null}
+
+                  {detail.studentImages.length > 0 ? (
+                    <div className="mt-3">
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-teal-700">
+                        Ảnh bài làm ({detail.studentImages.length})
+                      </p>
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                        {detail.studentImages.map((image, imageIndex) => (
+                          <button
+                            key={imageIndex}
+                            type="button"
+                            onClick={() => setPreviewImage(image)}
+                            className="group relative flex h-24 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-1"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={image} alt={`Bài làm ${imageIndex + 1}`} className="max-h-full max-w-full rounded-lg object-contain" />
+                            <span className="absolute inset-0 flex items-center justify-center bg-slate-950/0 text-white opacity-0 transition group-hover:bg-slate-950/40 group-hover:opacity-100">
+                              <ZoomIn className="size-5" />
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-500">
+                      Học sinh chưa nộp ảnh cho câu này.
+                    </p>
+                  )}
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[120px_1fr]">
+                    <div>
+                      <label className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        Điểm (0 – {formatNumber(detail.maxPoints)})
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={detail.maxPoints}
+                        step={0.25}
+                        value={scores[String(detail.questionId)]?.score ?? 0}
+                        onChange={(event) => updateScore(detail.questionId, event.target.value, detail.maxPoints)}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-emerald-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        Nhận xét
+                      </label>
+                      <input
+                        type="text"
+                        value={scores[String(detail.questionId)]?.comment ?? ''}
+                        onChange={(event) => updateComment(detail.questionId, event.target.value)}
+                        placeholder="Nhận xét bài làm của học sinh..."
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex items-center gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Trắc nghiệm</p>
+              <p className="text-sm font-black text-slate-800">{formatNumber(submission.autoScore)}đ</p>
+            </div>
+            <div className="h-8 w-px bg-slate-200" />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Tự luận</p>
+              <p className="text-sm font-black text-slate-800">{formatNumber(essayTotal)}đ</p>
+            </div>
+            <div className="h-8 w-px bg-slate-200" />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Tổng điểm</p>
+              <p className="text-lg font-black text-emerald-600">{formatNumber(finalTotal)}đ</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-500 transition hover:bg-slate-50 sm:flex-none"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700 active:scale-[0.98] sm:flex-none"
+            >
+              <Save className="size-4" />
+              Hoàn tất chấm bài
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {previewImage ? (
+        <button
+          type="button"
+          onClick={() => setPreviewImage(null)}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-4"
+          aria-label="Đóng ảnh"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={previewImage} alt="Ảnh bài làm phóng to" className="max-h-[90vh] max-w-full rounded-2xl object-contain shadow-2xl" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
