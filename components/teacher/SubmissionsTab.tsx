@@ -11,6 +11,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { createClient, mapRowToSubmission } from '@/lib/supabase';
 import type { Submission } from '@/lib/types';
 import { cn, formatNumber, initials, isPending } from '@/lib/utils';
 
@@ -51,12 +52,18 @@ export function SubmissionsTab({
 
   useEffect(() => {
     async function loadSubmissions() {
+      const supabase = createClient();
+      if (!supabase) {
+        setLoading(false);
+        return;
+      }
       try {
-        const res = await fetch('/api/submissions');
-        const data = await res.json();
-        if (data.success && Array.isArray(data.data)) {
-          setSubmissions(data.data);
-        }
+        const { data, error } = await supabase
+          .from('submissions')
+          .select('*')
+          .order('submitted_at', { ascending: false });
+        if (error) throw error;
+        setSubmissions((data || []).map(mapRowToSubmission));
       } catch {
         // Bỏ qua lỗi load
       } finally {
@@ -79,7 +86,7 @@ export function SubmissionsTab({
       const matchesKeyword =
         !query ||
         submission.studentName.toLowerCase().includes(query) ||
-        submission.studentClass.toLowerCase().includes(query) ||
+        submission.studentClass?.toLowerCase().includes(query) ||
         submission.examTitle.toLowerCase().includes(query);
       const pending = isPending(submission.status);
       const matchesStatus =

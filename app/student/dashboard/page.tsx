@@ -26,11 +26,10 @@ import {
   clearSession,
   getStudentProfile,
   loadExams,
-  loadSubmissions,
   saveStudentProfile,
-  saveSubmissions,
   setStudentSession,
 } from '@/lib/storage';
+import { createClient, mapRowToSubmission } from '@/lib/supabase';
 import { BrandLogo } from '@/components/ui/Brand';
 import { useToast } from '@/components/ui/FeedbackProvider';
 import { ExamRoom } from '@/components/student/ExamRoom';
@@ -42,12 +41,10 @@ export default function StudentDashboard() {
   const toast = useToast();
   const isClient = useIsClient();
 
-  const [exams] = useState<Exam[]>(() =>
+  const [exams, setExams] = useState<Exam[]>(() =>
     typeof window === 'undefined' ? [] : loadExams(),
   );
-  const [submissions, setSubmissions] = useState<Submission[]>(() =>
-    typeof window === 'undefined' ? [] : loadSubmissions(),
-  );
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [studentName, setStudentName] = useState(() =>
     typeof window === 'undefined' ? '' : getStudentProfile().name,
   );
@@ -61,6 +58,25 @@ export default function StudentDashboard() {
     const timer = setTimeout(() => saveStudentProfile(studentName, ''), 350);
     return () => clearTimeout(timer);
   }, [isClient, studentName]);
+
+  useEffect(() => {
+    async function loadMySubmissions() {
+      const supabase = createClient();
+      if (!supabase || !studentName.trim()) return;
+      try {
+        const { data, error } = await supabase
+          .from('submissions')
+          .select('*')
+          .eq('student_name', studentName.trim())
+          .order('submitted_at', { ascending: false });
+        if (error) throw error;
+        setSubmissions((data || []).map(mapRowToSubmission));
+      } catch {
+        // Bỏ qua lỗi
+      }
+    }
+    loadMySubmissions();
+  }, [studentName]);
 
   const mySubmissions = useMemo(() => {
     const name = studentName.trim().toLowerCase();
@@ -96,20 +112,46 @@ export default function StudentDashboard() {
     if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
   };
 
-  const handleSubmitted = (submission: Submission) => {
-    const next = [submission, ...loadSubmissions()];
-    saveSubmissions(next);
-    setSubmissions(next);
+  const handleSubmitted = async (submission: Submission) => {
     setResult(submission);
     setSelectedExam(null);
     toast.success('Đã nộp bài thành công', 'Kết quả trắc nghiệm đã được cập nhật ngay bên dưới.');
     if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
+
+    // Gửi bài nộp lên Supabase cloud để giáo viên thấy
+    const supabase = createClient();
+    if (supabase) {
+      try {
+        await supabase.from('submissions').insert({
+          exam_id: submission.examId,
+          student_id: submission.studentName,
+          student_name: submission.studentName,
+          student_class: submission.studentClass || null,
+          exam_title: submission.examTitle,
+          auto_score: submission.autoScore,
+          score: submission.score,
+          mcq_count: submission.mcqCount,
+          mcq_correct_count: submission.mcqCorrectCount,
+          student_mcq_answers: submission.studentMcqAnswers,
+          correct_mcq_answers: submission.correctMcqAnswers,
+          mcq_images: submission.mcqImages,
+          essay_details: submission.essayDetails,
+          status: submission.status,
+          submitted_at: submission.submittedAt,
+          time_spent_seconds: submission.timeSpentSeconds || 0,
+        });
+      } catch {
+        toast.warning('Lưu bài nộp', 'Không thể gửi bài nộp lên cloud. Bài làm đã lưu cục bộ.');
+      }
+    } else {
+      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập NEXT_PUBLIC_SUPABASE_URL và NEXT_PUBLIC_SUPABASE_ANON_KEY trong .env.local.');
+    }
   };
 
   const handleBack = () => {
     setResult(null);
     setSelectedExam(null);
-    setSubmissions(loadSubmissions());
+    setSubmissions([]);
     if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
   };
 

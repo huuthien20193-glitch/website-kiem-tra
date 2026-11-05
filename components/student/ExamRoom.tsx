@@ -25,6 +25,7 @@ import {
   saveDraft,
 } from '@/lib/storage';
 import { imageFilesFromClipboard, optimizeImage } from '@/lib/image';
+import { createClient, SubmissionRow } from '@/lib/supabase';
 import { useConfirm, useToast } from '@/components/ui/FeedbackProvider';
 
 type ExamRoomProps = {
@@ -118,15 +119,32 @@ export function ExamRoom({
     if (auto) {
       toast.warning('Hết giờ làm bài', 'Hệ thống đã tự động nộp bài làm của bạn.');
     }
-    // Gửi bài nộp lên API chung để giáo viên thấy
-    try {
-      await fetch('/api/submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(submission),
-      });
-    } catch {
-      toast.warning('Lưu bài nộp', 'Không thể gửi bài nộp lên server. Dữ liệu đã lưu cục bộ.');
+    // Gửi bài nộp lên Supabase cloud để giáo viên thấy trên mọi thiết bị
+    const supabase = createClient();
+    if (supabase) {
+      try {
+        await supabase.from('submissions').insert({
+          exam_id: exam.id,
+          student_id: studentName,
+          student_name: studentName,
+          student_class: studentClass || null,
+          exam_title: exam.title,
+          auto_score: submission.autoScore,
+          score: submission.score,
+          mcq_count: submission.mcqCount,
+          mcq_correct_count: submission.mcqCorrectCount,
+          student_mcq_answers: submission.studentMcqAnswers,
+          correct_mcq_answers: submission.correctMcqAnswers,
+          mcq_images: submission.mcqImages,
+          essay_details: submission.essayDetails,
+          status: submission.status,
+          submitted_at: submission.submittedAt,
+        } as SubmissionRow);
+      } catch {
+        toast.warning('Lưu bài nộp', 'Không thể gửi bài nộp lên cloud. Dữ liệu đã lưu cục bộ.');
+      }
+    } else {
+      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập NEXT_PUBLIC_SUPABASE_URL và NEXT_PUBLIC_SUPABASE_ANON_KEY trong .env.local.');
     }
     onSubmitted(submission);
   };

@@ -16,19 +16,11 @@ import {
   X,
 } from 'lucide-react';
 import type { Exam, Submission, TeacherTab } from '@/lib/types';
-import {
-  clearSession,
-  clearSubmissions,
-  deleteSubmissionById,
-  getSession,
-  loadExams,
-  loadSubmissions,
-  saveExams,
-  updateSubmission,
-} from '@/lib/storage';
+import { clearSession, getSession, loadExams, saveExams } from '@/lib/storage';
 import { cn, formatNumber, isPending } from '@/lib/utils';
 import { downloadCsv } from '@/lib/export';
 import { BrandLogo } from '@/components/ui/Brand';
+import { createClient } from '@/lib/supabase';
 import { useConfirm, useToast } from '@/components/ui/FeedbackProvider';
 import { useIsClient } from '@/lib/hooks';
 import { OverviewTab } from '@/components/teacher/OverviewTab';
@@ -55,9 +47,7 @@ export default function TeacherDashboard() {
   const [exams, setExams] = useState<Exam[]>(() =>
     typeof window === 'undefined' ? [] : loadExams(),
   );
-  const [submissions, setSubmissions] = useState<Submission[]>(() =>
-    typeof window === 'undefined' ? [] : loadSubmissions(),
-  );
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [gradingSubmission, setGradingSubmission] = useState<Submission | null>(null);
 
@@ -143,12 +133,17 @@ export default function TeacherDashboard() {
     });
     if (!confirmed) return;
 
-    try {
-      await fetch(`/api/submissions/${id}`, { method: 'DELETE' });
-      setSubmissions(submissions.filter((s) => s.id !== id));
-      toast.success('Đã xóa bài nộp');
-    } catch {
-      toast.error('Lỗi', 'Không thể xóa bài nộp.');
+    const supabase = createClient();
+    if (supabase) {
+      try {
+        await supabase.from('submissions').delete().eq('id', id);
+        setSubmissions(submissions.filter((s) => s.id !== id));
+        toast.success('Đã xóa bài nộp');
+      } catch {
+        toast.error('Lỗi', 'Không thể xóa bài nộp.');
+      }
+    } else {
+      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập biến môi trường Supabase.');
     }
   };
 
@@ -165,13 +160,18 @@ export default function TeacherDashboard() {
     });
     if (!confirmed) return;
 
-    try {
-      await fetch('/api/submissions/clear', { method: 'DELETE' });
-      setSubmissions([]);
-      setGradingSubmission(null);
-      toast.success('Đã xóa toàn bộ kết quả', 'Bộ nhớ đã được giải phóng.');
-    } catch {
-      toast.error('Lỗi', 'Không thể xóa toàn bộ bài nộp.');
+    const supabase = createClient();
+    if (supabase) {
+      try {
+        await supabase.from('submissions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        setSubmissions([]);
+        setGradingSubmission(null);
+        toast.success('Đã xóa toàn bộ kết quả', 'Bộ nhớ đã được giải phóng.');
+      } catch {
+        toast.error('Lỗi', 'Không thể xóa toàn bộ bài nộp.');
+      }
+    } else {
+      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập biến môi trường Supabase.');
     }
   };
 
@@ -185,21 +185,25 @@ export default function TeacherDashboard() {
   };
 
   const handleSaveGrading = async (updated: Submission) => {
-    try {
-      await fetch(`/api/submissions/${updated.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          score: updated.score,
-          status: updated.status,
-          essayDetails: updated.essayDetails,
-        }),
-      });
-      setSubmissions(submissions.map((s) => (s.id === updated.id ? updated : s)));
-      setGradingSubmission(null);
-      toast.success('Đã lưu điểm', `${updated.studentName}: ${formatNumber(updated.score)} điểm.`);
-    } catch {
-      toast.error('Lỗi', 'Không thể lưu điểm.');
+    const supabase = createClient();
+    if (supabase) {
+      try {
+        await supabase
+          .from('submissions')
+          .update({
+            score: updated.score,
+            status: updated.status,
+            essay_details: updated.essayDetails,
+          })
+          .eq('id', updated.id);
+        setSubmissions(submissions.map((s) => (s.id === updated.id ? updated : s)));
+        setGradingSubmission(null);
+        toast.success('Đã lưu điểm', `${updated.studentName}: ${formatNumber(updated.score)} điểm.`);
+      } catch {
+        toast.error('Lỗi', 'Không thể lưu điểm.');
+      }
+    } else {
+      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập biến môi trường Supabase.');
     }
   };
 

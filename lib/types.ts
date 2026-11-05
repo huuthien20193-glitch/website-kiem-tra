@@ -60,6 +60,7 @@ export type Submission = {
   essayDetails: EssayDetail[];
   status: string;
   submittedAt: string;
+  timeSpentSeconds?: number;
 };
 
 export type TeacherTab = 'overview' | 'exams' | 'create-exam' | 'submissions';
