@@ -20,7 +20,7 @@ import { clearSession, getSession, loadExams, saveExams } from '@/lib/storage';
 import { cn, formatNumber, isPending } from '@/lib/utils';
 import { downloadCsv } from '@/lib/export';
 import { BrandLogo } from '@/components/ui/Brand';
-import { createClient } from '@/lib/supabase';
+import { createClient, mapRowToSubmission } from '@/lib/supabase';
 import { useConfirm, useToast } from '@/components/ui/FeedbackProvider';
 import { useIsClient } from '@/lib/hooks';
 import { OverviewTab } from '@/components/teacher/OverviewTab';
