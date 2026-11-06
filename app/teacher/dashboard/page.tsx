@@ -51,7 +51,7 @@ export default function TeacherDashboard() {
 
   const teacherName = session.username || 'Thầy Thiện'
 
-  // ✅ THÊM: Fetch exams từ Supabase khi component mount
+  // Fetch exams từ Supabase khi component mount
   useEffect(() => {
     const fetchExams = async () => {
       const supabase = createClient()
@@ -69,7 +69,7 @@ export default function TeacherDashboard() {
     fetchExams()
   }, [createClient])
 
-  // ✅ THÊM: Lắng nghe khi tab/window được focus lại → refresh exams từ Supabase
+  // Lắng nghe khi window focus lại để refresh exams
   useEffect(() => {
     const handleFocus = async () => {
       const supabase = createClient()
@@ -84,6 +84,45 @@ export default function TeacherDashboard() {
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
+  }, [createClient])
+
+  // Fetch submissions từ Supabase khi component mount
+  useEffect(() => {
+    const fetchSubmissions = async () => {
+      const supabase = createClient()
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('submissions').select('*')
+          if (data) {
+            const formattedSubmissions = data.map((row) => mapRowToSubmission(row))
+            setSubmissions(formattedSubmissions)
+          }
+        } catch (err) {
+          console.error('Không thể tải bài nộp:', err)
+        }
+      }
+    }
+    fetchSubmissions()
+  }, [createClient])
+
+  // Lắng nghe khi window focus lại để refresh danh sách bài nộp mới nhất từ học sinh
+  useEffect(() => {
+    const handleFocusSubmissions = async () => {
+      const supabase = createClient()
+      if (supabase) {
+        try {
+          const { data } = await supabase.from('submissions').select('*')
+          if (data) {
+            const formattedSubmissions = data.map((row) => mapRowToSubmission(row))
+            setSubmissions(formattedSubmissions)
+          }
+        } catch (err) {
+          console.error('Lỗi refresh bài nộp:', err)
+        }
+      }
+    }
+    window.addEventListener('focus', handleFocusSubmissions)
+    return () => window.removeEventListener('focus', handleFocusSubmissions)
   }, [createClient])
 
   useEffect(() => {
@@ -119,7 +158,7 @@ export default function TeacherDashboard() {
         toast.success('Đã công bố đề kiểm tra', exam.title)
       })
     } else {
-      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập NEXT_PUBLIC_SUPABASE_URL và NEXT_PUBLIC_SUPABASE_ANON_KEY trong .env.local.')
+      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập biến môi trường Supabase.')
     }
   }
 
@@ -179,7 +218,7 @@ export default function TeacherDashboard() {
     }
     const confirmed = await confirm({
       title: 'Xóa toàn bộ kết quả?',
-      message: `Toàn bộ ${submissions.length} bài nộp sẽ bị xóa khỏi thiết bị này. Hành động không thể hoàn tác.`,
+      message: `Toàn bộ ${submissions.length} bài nộp sẽ bị xóa khỏi cơ sở dữ liệu. Hành động không thể hoàn tác.`,
       confirmLabel: 'Xóa tất cả',
       tone: 'danger',
     })
@@ -333,7 +372,7 @@ export default function TeacherDashboard() {
             <button
               type="button"
               onClick={() => router.push('/student/dashboard')}
-              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-400 transition:hover:bg-white/5 hover:text-white"
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-400 transition hover:bg-white/5 hover:text-white"
             >
               <GraduationCap className="size-4" />
               Cổng học sinh
@@ -341,7 +380,7 @@ export default function TeacherDashboard() {
             <button
               type="button"
               onClick={handleLogout}
-              className="flex w-full items-center gap-2.5 rounded-xl bg-rose-500/10 px-3 py-2.5 text-xs font-bold text-rose-300 transition:hover:bg-rose-500/20"
+              className="flex w-full items-center gap-2.5 rounded-xl bg-rose-500/10 px-3 py-2.5 text-xs font-bold text-rose-300 transition hover:bg-rose-500/20"
             >
               <LogOut className="size-4" />
               Đăng xuất
@@ -356,7 +395,7 @@ export default function TeacherDashboard() {
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
-              className="rounded-xl border border-slate-200 p-2 text-slate-600 transition:hover:bg-slate-50"
+              className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50"
               aria-label="Mở menu"
             >
               <Menu className="size-5" />
@@ -395,9 +434,9 @@ export default function TeacherDashboard() {
               onCreate={() => navigate('create-exam')}
               onDelete={handleDeleteExam}
               onDuplicate={() => {
-      toast.info('Chức năng sắp sàng', 'Chào bạn')
-      return true as boolean
-    }}
+                toast.info('Chức năng sắp sàng', 'Chào bạn')
+                return true as boolean
+              }}
             />
           ) : null}
 
@@ -407,6 +446,7 @@ export default function TeacherDashboard() {
 
           {activeTab === 'submissions' ? (
             <SubmissionsTab
+              submissions={submissions}
               onGrade={(submission) => setGradingSubmission(submission)}
               onDelete={handleDeleteSubmission}
               onClearAll={handleClearAllSubmissions}
@@ -415,6 +455,14 @@ export default function TeacherDashboard() {
           ) : null}
         </main>
       </div>
+
+      {gradingSubmission ? (
+        <GradingModal
+          submission={gradingSubmission}
+          onClose={() => setGradingSubmission(null)}
+          onSave={handleSaveGrading}
+        />
+      ) : null}
     </div>
   )
 }
