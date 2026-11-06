@@ -1,6 +1,6 @@
-'use client';
+'use client'
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react'
 import {
   Award,
   CheckCircle2,
@@ -10,22 +10,22 @@ import {
   Search,
   Trash2,
   X,
-} from 'lucide-react';
-import { createClient, mapRowToSubmission } from '@/lib/supabase';
-import type { Submission } from '@/lib/types';
-import { cn, formatNumber, initials, isPending } from '@/lib/utils';
+} from 'lucide-react'
+import { createClient, mapRowToSubmission } from '@/lib/supabase'
+import type { Submission } from '@/lib/types'
+import { cn, formatNumber, initials, isPending } from '@/lib/utils'
 
-type StatusFilter = 'all' | 'pending' | 'done';
+type StatusFilter = 'all' | 'pending' | 'done'
 
 type SubmissionsTabProps = {
-  onGrade: (submission: Submission) => void;
-  onDelete: (id: string) => void;
-  onClearAll: () => void;
-  onExport: () => void;
-};
+  onGrade: (submission: Submission) => void
+  onDelete: (id: string) => void
+  onClearAll: () => void
+  onExport: () => void
+}
 
 function StatusBadge({ status }: { status: string }) {
-  const pending = isPending(status);
+  const pending = isPending(status)
   return (
     <span
       className={cn(
@@ -36,7 +36,7 @@ function StatusBadge({ status }: { status: string }) {
       <span className={cn('size-1.5 rounded-full', pending ? 'bg-amber-500' : 'bg-emerald-500')} />
       {pending ? 'Chờ chấm tự luận' : 'Đã hoàn tất'}
     </span>
-  );
+  )
 }
 
 export function SubmissionsTab({
@@ -45,84 +45,84 @@ export function SubmissionsTab({
   onClearAll,
   onExport,
 }: SubmissionsTabProps) {
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [keyword, setKeyword] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [keyword, setKeyword] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
 
   useEffect(() => {
     async function loadSubmissions() {
-      const supabase = createClient();
+      const supabase = createClient()
       if (!supabase) {
-        setLoading(false);
-        return;
+        setIsLoading(false)
+        return
       }
       try {
         const { data, error } = await supabase
           .from('submissions')
           .select('*')
-          .order('submitted_at', { ascending: false });
-        if (error) throw error;
-        setSubmissions((data || []).map(mapRowToSubmission));
+          .order('submitted_at', { ascending: false })
+        if (error) throw error
+        setSubmissions((data || []).map(mapRowToSubmission))
       } catch {
         // Bỏ qua lỗi load
       } finally {
-        setLoading(false);
+        setIsLoading(false)
       }
     }
 
     // Chạy ngay khi component mount
-    loadSubmissions();
+    loadSubmissions()
 
     // ✅ THÊM: Lắng nghe khi tab/window được focus lại → refresh submissions
     const handleFocus = () => {
-      loadSubmissions();
-    };
-    window.addEventListener('focus', handleFocus);
+      loadSubmissions()
+    }
+    window.addEventListener('focus', handleFocus)
 
-    return () => window.removeEventListener('focus', handleFocus);
-  }, []);
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [])
 
-  const pendingCount = submissions.filter((submission) => isPending(submission.status)).length;
-  const gradedCount = submissions.length - pendingCount;
+  const pendingCount = submissions.filter((submission) => isPending(submission.status)).length
+  const gradedCount = submissions.length - pendingCount
   const averageScore =
     submissions.length > 0
       ? submissions.reduce((sum, submission) => sum + submission.score, 0) / submissions.length
-      : 0;
+      : 0
 
   const filtered = useMemo(() => {
-    const query = keyword.trim().toLowerCase();
+    const query = keyword.trim().toLowerCase()
     return submissions.filter((submission) => {
       const matchesKeyword =
         !query ||
         submission.studentName.toLowerCase().includes(query) ||
         submission.studentClass?.toLowerCase().includes(query) ||
-        submission.examTitle.toLowerCase().includes(query);
-      const pending = isPending(submission.status);
+        submission.examTitle.toLowerCase().includes(query)
+      const pending = isPending(submission.status)
       const matchesStatus =
-        statusFilter === 'all' || (statusFilter === 'pending' ? pending : !pending);
-      return matchesKeyword && matchesStatus;
-    });
-  }, [submissions, keyword, statusFilter]);
+        statusFilter === 'all' || (statusFilter === 'pending' ? pending : !pending)
+      return matchesKeyword && matchesStatus
+    })
+  }, [submissions, keyword, statusFilter])
 
   const filterButtons: Array<{ key: StatusFilter; label: string; count: number }> = [
     { key: 'all', label: 'Tất cả', count: submissions.length },
     { key: 'pending', label: 'Chờ chấm', count: pendingCount },
     { key: 'done', label: 'Hoàn tất', count: gradedCount },
-  ];
+  ]
 
   return (
     <div className="space-y-6 animate-fade-up">
       <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Kết quả thi &amp; Chấm bài</h1>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Kết quả thi & Chấm bài</h1>
           <p className="mt-1 text-sm text-slate-500">Theo dõi bài nộp, chấm tự luận và xuất bảng điểm cho giáo viên.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={onExport}
-            className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700 active:scale-[0.98]"
+            className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition:hover:bg-emerald-700 active:scale-[0.98]"
           >
             <Download className="size-4" />
             Xuất file điểm
@@ -151,7 +151,7 @@ export function SubmissionsTab({
             tone: 'bg-violet-50 text-violet-600',
           },
         ].map((stat) => {
-          const Icon = stat.icon;
+          const Icon = stat.icon
           return (
             <div key={stat.label} className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', stat.tone)}>
@@ -162,7 +162,7 @@ export function SubmissionsTab({
                 <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">{stat.label}</p>
               </div>
             </div>
-          );
+          )
         })}
       </div>
 
@@ -234,73 +234,70 @@ export function SubmissionsTab({
           </div>
         ) : (
           <>
-            {/* Desktop table */}
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                    <th className="px-5 py-3.5">Học sinh</th>
-                    <th className="px-5 py-3.5">Đề thi</th>
-                    <th className="px-5 py-3.5">Điểm</th>
-                    <th className="px-5 py-3.5">Trạng thái</th>
-                    <th className="px-5 py-3.5">Thời gian nộp</th>
-                    <th className="px-5 py-3.5 text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {filtered.map((submission) => {
-                    const essayScore = Math.max(0, Number((submission.score - submission.autoScore).toFixed(1)));
-                    return (
-                      <tr key={submission.id} className="transition hover:bg-slate-50/70">
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 text-[10px] font-black text-white">
-                              {initials(submission.studentName)}
-                            </span>
-                            <div>
-                              <p className="font-bold text-slate-900">{submission.studentName}</p>
-                              <p className="text-[11px] font-medium text-slate-400">{submission.studentClass}</p>
-                            </div>
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  <th className="px-5 py-3.5">Học sinh</th>
+                  <th className="px-5 py-3.5">Đề thi</th>
+                  <th className="px-5 py-3.5">Điểm</th>
+                  <th className="px-5 py-3.5">Trạng thái</th>
+                  <th className="px-5 py-3.5">Thời gian nộp</th>
+                  <th className="px-5 py-3.5 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {filtered.map((submission) => {
+                  const essayScore = Math.max(0, Number((submission.score - submission.autoScore).toFixed(1)))
+                  return (
+                    <tr key={submission.id} className="transition hover:bg-slate-50/70">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 text-[10px] font-black text-white">
+                            {initials(submission.studentName)}
+                          </span>
+                          <div>
+                            <p className="font-bold text-slate-900">{submission.studentName}</p>
+                            <p className="text-[11px] font-medium text-slate-400">{submission.studentClass}</p>
                           </div>
-                        </td>
-                        <td className="max-w-[240px] px-5 py-4">
-                          <p className="truncate text-xs font-semibold text-slate-700">{submission.examTitle}</p>
-                        </td>
-                        <td className="px-5 py-4">
-                          <p className="text-base font-black text-emerald-600">{formatNumber(submission.score)}đ</p>
-                          <p className="text-[10px] font-medium text-slate-400">
-                            TN {formatNumber(submission.autoScore)} · TL {formatNumber(essayScore)}
-                          </p>
-                        </td>
-                        <td className="px-5 py-4">
-                          <StatusBadge status={submission.status} />
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-4 text-[11px] font-medium text-slate-400">
-                          {submission.submittedAt}
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => onGrade(submission)}
-                            className="rounded-xl bg-teal-50 px-3 py-2 text-[11px] font-bold text-teal-700 transition hover:bg-teal-100"
-                          >
-                            {isPending(submission.status) ? 'Chấm bài' : 'Xem chi tiết'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onDelete(submission.id)}
-                            className="ml-1 rounded-xl p-2 text-rose-400 transition hover:bg-rose-50 hover:text-rose-600"
-                            aria-label="Xóa bài nộp"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </td>
+                      <td className="max-w-[240px] px-5 py-4">
+                        <p className="truncate text-xs font-semibold text-slate-700">{submission.examTitle}</p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <p className="text-base font-black text-emerald-600">{formatNumber(submission.score)}đ</p>
+                        <p className="text-[10px] font-medium text-slate-400">
+                          TN {formatNumber(submission.autoScore)} · TL {formatNumber(essayScore)}
+                        </p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <StatusBadge status={submission.status} />
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-4 text-[11px] font-medium text-slate-400">
+                        {submission.submittedAt}
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => onGrade(submission)}
+                          className="rounded-xl bg-teal-50 px-3 py-2 text-[11px] font-bold text-teal-700 transition:hover:bg-teal-100"
+                        >
+                          {isPending(submission.status) ? 'Chấm bài' : 'Xem chi tiết'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDelete(submission.id)}
+                          className="ml-1 rounded-xl p-2 text-rose-400 transition:hover:bg-rose-50 hover:text-rose-600"
+                          aria-label="Xóa bài nộp"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
 
             {/* Mobile cards */}
             <ul className="divide-y divide-slate-100 md:hidden">
@@ -350,5 +347,5 @@ export function SubmissionsTab({
         )}
       </div>
     </div>
-  );
+  )
 }
