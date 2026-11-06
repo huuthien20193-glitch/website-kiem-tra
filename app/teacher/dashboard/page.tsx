@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import type { Exam, Submission, TeacherTab } from '@/lib/types'
-import { clearSession, getSession, loadExams, saveExams } from '@/lib/storage'
+import { clearSession, getSession, loadExams } from '@/lib/storage'
 import { cn, formatNumber, isPending } from '@/lib/utils'
 import { downloadCsv } from '@/lib/export'
 import { BrandLogo } from '@/components/ui/Brand'
@@ -51,79 +51,55 @@ export default function TeacherDashboard() {
 
   const teacherName = session.username || 'Thầy Thiện'
 
-  // Fetch exams từ Supabase khi component mount
-  useEffect(() => {
-    const fetchExams = async () => {
-      const supabase = createClient()
-      if (supabase) {
-        try {
-          const { data, error } = await supabase.from('exams').select('*')
-          if (data) setExams(data as Exam[])
-        } catch {
-          setExams(typeof window !== 'undefined' ? loadExams() : [])
-        }
-      } else {
-        setExams(typeof window !== 'undefined' ? loadExams() : [])
-      }
+  // Tải danh sách đề thi từ Supabase
+  const fetchExams = async () => {
+    const supabase = createClient()
+    if (!supabase) {
+      setExams(typeof window !== 'undefined' ? loadExams() : [])
+      return
     }
-    fetchExams()
-  }, [createClient])
 
-  // Lắng nghe khi window focus lại để refresh exams
+    const { data, error } = await supabase.from('exams').select('*')
+    if (error || !data) {
+      setExams(typeof window !== 'undefined' ? loadExams() : [])
+      return
+    }
+    setExams(data as Exam[])
+  }
+
+  // Tải danh sách bài nộp từ Supabase
+  const fetchSubmissions = async () => {
+    const supabase = createClient()
+    if (!supabase) return
+
+    const { data, error } = await supabase.from('submissions').select('*')
+    if (error) {
+      console.error('Không thể tải bài nộp:', error)
+      return
+    }
+    if (data) {
+      const formattedSubmissions = data.map((row) => mapRowToSubmission(row))
+      setSubmissions(formattedSubmissions)
+    }
+  }
+
+  // Tải dữ liệu khi mở trang
   useEffect(() => {
-    const handleFocus = async () => {
-      const supabase = createClient()
-      if (supabase) {
-        try {
-          const { data } = await supabase.from('exams').select('*')
-          if (data) setExams(data as Exam[])
-        } catch {
-          setExams(typeof window !== 'undefined' ? loadExams() : [])
-        }
-      }
+    fetchExams()
+    fetchSubmissions()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Tải lại dữ liệu khi quay lại tab trình duyệt
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchExams()
+      fetchSubmissions()
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
-  }, [createClient])
-
-  // Fetch submissions từ Supabase khi component mount
-  useEffect(() => {
-    const fetchSubmissions = async () => {
-      const supabase = createClient()
-      if (supabase) {
-        try {
-          const { data, error } = await supabase.from('submissions').select('*')
-          if (data) {
-            const formattedSubmissions = data.map((row) => mapRowToSubmission(row))
-            setSubmissions(formattedSubmissions)
-          }
-        } catch (err) {
-          console.error('Không thể tải bài nộp:', err)
-        }
-      }
-    }
-    fetchSubmissions()
-  }, [createClient])
-
-  // Lắng nghe khi window focus lại để refresh danh sách bài nộp mới nhất từ học sinh
-  useEffect(() => {
-    const handleFocusSubmissions = async () => {
-      const supabase = createClient()
-      if (supabase) {
-        try {
-          const { data } = await supabase.from('submissions').select('*')
-          if (data) {
-            const formattedSubmissions = data.map((row) => mapRowToSubmission(row))
-            setSubmissions(formattedSubmissions)
-          }
-        } catch (err) {
-          console.error('Lỗi refresh bài nộp:', err)
-        }
-      }
-    }
-    window.addEventListener('focus', handleFocusSubmissions)
-    return () => window.removeEventListener('focus', handleFocusSubmissions)
-  }, [createClient])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (isClient && session.role !== 'TEACHER') {
@@ -139,27 +115,35 @@ export default function TeacherDashboard() {
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const handleCreateExam = (exam: Exam) => {
+  const handleCreateExam = async (exam: any) => {
     const supabase = createClient()
-    if (supabase) {
-      const examData = {
-        title: exam.title,
-        subject: exam.subject,
-        durationMinutes: exam.durationMinutes,
-        totalPoints: exam.totalPoints,
-        mcqCount: exam.mcqCount,
-        essayQuestions: exam.essayQuestions,
-        mcqImages: exam.mcqImages ?? [],
-        mcqPointPerQ: exam.mcqPointPerQ ?? 0,
-        mcqAnswers: exam.mcqAnswers ?? [],
-      }
-      supabase.from('exams').insert(examData).then((res) => {
-        setExams((prev) => [...prev, { id: Date.now().toString(), ...examData } as Exam])
-        toast.success('Đã công bố đề kiểm tra', exam.title)
-      })
-    } else {
+    if (!supabase) {
       toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập biến môi trường Supabase.')
+      return
     }
+
+    const examData = {
+      title: exam.title,
+      subject: exam.subject,
+      durationMinutes: exam.durationMinutes,
+      totalPoints: exam.totalPoints,
+      mcqCount: exam.mcqCount,
+      essayQuestions: exam.essayQuestions,
+      mcqImages: exam.mcqImages ?? [],
+      mcqPointPerQ: exam.mcqPointPerQ ?? 0,
+      mcqAnswers: exam.mcqAnswers ?? [],
+    }
+
+    const { data, error } = await supabase.from('exams').insert(examData).select().single()
+
+    if (error || !data) {
+      toast.error('Lỗi', 'Không thể công bố đề kiểm tra.')
+      return
+    }
+
+    setExams((prev) => [...prev, data as Exam])
+    toast.success('Đã công bố đề kiểm tra', exam.title)
+    navigate('exams')
   }
 
   const handleDeleteExam = async (exam: Exam) => {
@@ -172,17 +156,16 @@ export default function TeacherDashboard() {
     if (!confirmed) return
 
     const supabase = createClient()
-    if (supabase) {
-      try {
-        await supabase.from('submissions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        setExams(exams.filter((s) => s.id !== exam.id))
-        toast.success('Đã xóa đề kiểm tra')
-      } catch {
-        toast.error('Lỗi', 'Không thể xóa đề kiểm tra.')
-      }
-    } else {
-      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập biến môi trường Supabase.')
+    if (!supabase) return
+
+    const { error } = await supabase.from('exams').delete().eq('id', exam.id)
+    if (error) {
+      toast.error('Lỗi', 'Không thể xóa đề kiểm tra.')
+      return
     }
+
+    setExams(exams.filter((item) => item.id !== exam.id))
+    toast.success('Đã xóa đề kiểm tra')
   }
 
   const handleDeleteSubmission = async (id: string) => {
@@ -198,17 +181,16 @@ export default function TeacherDashboard() {
     if (!confirmed) return
 
     const supabase = createClient()
-    if (supabase) {
-      try {
-        await supabase.from('submissions').delete().eq('id', id)
-        setSubmissions(submissions.filter((s) => s.id !== id))
-        toast.success('Đã xóa bài nộp')
-      } catch {
-        toast.error('Lỗi', 'Không thể xóa bài nộp.')
-      }
-    } else {
-      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập biến môi trường Supabase.')
+    if (!supabase) return
+
+    const { error } = await supabase.from('submissions').delete().eq('id', id)
+    if (error) {
+      toast.error('Lỗi', 'Không thể xóa bài nộp.')
+      return
     }
+
+    setSubmissions(submissions.filter((item) => item.id !== id))
+    toast.success('Đã xóa bài nộp')
   }
 
   const handleClearAllSubmissions = async () => {
@@ -216,6 +198,7 @@ export default function TeacherDashboard() {
       toast.info('Danh sách đang trống', 'Chưa có bài nộp nào để xóa.')
       return
     }
+
     const confirmed = await confirm({
       title: 'Xóa toàn bộ kết quả?',
       message: `Toàn bộ ${submissions.length} bài nộp sẽ bị xóa khỏi cơ sở dữ liệu. Hành động không thể hoàn tác.`,
@@ -225,18 +208,21 @@ export default function TeacherDashboard() {
     if (!confirmed) return
 
     const supabase = createClient()
-    if (supabase) {
-      try {
-        await supabase.from('submissions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        setSubmissions([])
-        setGradingSubmission(null)
-        toast.success('Đã xóa toàn bộ kết quả', 'Bộ nhớ đã được giải phóng.')
-      } catch {
-        toast.error('Lỗi', 'Không thể xóa toàn bộ bài nộp.')
-      }
-    } else {
-      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập biến môi trường Supabase.')
+    if (!supabase) return
+
+    const { error } = await supabase
+      .from('submissions')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+
+    if (error) {
+      toast.error('Lỗi', 'Không thể xóa toàn bộ bài nộp.')
+      return
     }
+
+    setSubmissions([])
+    setGradingSubmission(null)
+    toast.success('Đã xóa toàn bộ kết quả', 'Bộ nhớ đã được giải phóng.')
   }
 
   const handleExportCsv = () => {
@@ -250,25 +236,25 @@ export default function TeacherDashboard() {
 
   const handleSaveGrading = async (updated: Submission) => {
     const supabase = createClient()
-    if (supabase) {
-      try {
-        await supabase
-          .from('submissions')
-          .update({
-            score: updated.score,
-            status: updated.status,
-            essay_details: updated.essayDetails,
-          })
-          .eq('id', updated.id)
-        setSubmissions(submissions.map((s) => (s.id === updated.id ? updated : s)))
-        setGradingSubmission(null)
-        toast.success('Đã lưu điểm', `${updated.studentName}: ${formatNumber(updated.score)} điểm.`)
-      } catch {
-        toast.error('Lỗi', 'Không thể lưu điểm.')
-      }
-    } else {
-      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập biến môi trường Supabase.')
+    if (!supabase) return
+
+    const { error } = await supabase
+      .from('submissions')
+      .update({
+        score: updated.score,
+        status: updated.status,
+        essay_details: updated.essayDetails,
+      })
+      .eq('id', updated.id)
+
+    if (error) {
+      toast.error('Lỗi', 'Không thể lưu điểm.')
+      return
     }
+
+    setSubmissions(submissions.map((item) => (item.id === updated.id ? updated : item)))
+    setGradingSubmission(null)
+    toast.success('Đã lưu điểm', `${updated.studentName}: ${formatNumber(updated.score)} điểm.`)
   }
 
   const handleLogout = () => {
@@ -434,14 +420,14 @@ export default function TeacherDashboard() {
               onCreate={() => navigate('create-exam')}
               onDelete={handleDeleteExam}
               onDuplicate={() => {
-                toast.info('Chức năng sắp sàng', 'Chào bạn')
+                toast.info('Chức năng sắp ra mắt', 'Tính năng nhân bản đề đang được phát triển.')
                 return true as boolean
               }}
             />
           ) : null}
 
           {activeTab === 'create-exam' ? (
-            <CreateExamTab onCreate={(exam) => handleCreateExam(exam as any)} onCancel={() => navigate('exams')} />
+            <CreateExamTab onCreate={handleCreateExam as any} onCancel={() => navigate('exams')} />
           ) : null}
 
           {activeTab === 'submissions' ? (
