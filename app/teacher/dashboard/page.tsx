@@ -441,12 +441,11 @@ export default function TeacherDashboard() {
           ) : null}
 
           {activeTab === 'create-exam' ? (
-            <CreateExamTab onCreate={handleCreateExam} onCancel={() => navigate('exams')} />
+            <CreateExamTab onCreate={(exam) => handleCreateExam(exam as any)} onCancel={() => navigate('exams')} />
           ) : null}
 
           {activeTab === 'submissions' ? (
             <SubmissionsTab
-              submissions={submissions}
               onGrade={(submission) => setGradingSubmission(submission)}
               onDelete={handleDeleteSubmission}
               onClearAll={handleClearAllSubmissions}
