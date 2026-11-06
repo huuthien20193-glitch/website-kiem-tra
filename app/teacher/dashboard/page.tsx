@@ -103,17 +103,16 @@ export default function TeacherDashboard() {
   const handleCreateExam = (exam: Exam) => {
     const supabase = createClient()
     if (supabase) {
-      supabase.from('exams').insert({
+      const examData = {
         title: exam.title,
         subject: exam.subject,
-        duration_minutes: exam.durationMinutes,
-        total_points: exam.totalPoints,
-        mcq_count: exam.mcqCount,
-        essay_questions: exam.essayQuestions.length,
-        status: 'draft',
-      }).then((res) => {
-        const newExam = { id: Date.now().toString(), ...exam } as Exam
-        setExams((prev) => [...prev, newExam])
+        durationMinutes: exam.durationMinutes,
+        totalPoints: exam.totalPoints,
+        mcqCount: exam.mcqCount,
+        essayQuestions: exam.essayQuestions.length,
+      }
+      supabase.from('exams').insert(examData).then((res) => {
+        setExams((prev) => [...prev, { id: Date.now().toString(), ...examData } as Exam])
         toast.success('Đã công bố đề kiểm tra', exam.title)
       })
     } else {
@@ -394,7 +393,7 @@ export default function TeacherDashboard() {
               onDelete={handleDeleteExam}
               onDuplicate={() => {
       toast.info('Chức năng sắp sàng', 'Chào bạn')
-      return true
+      return true as boolean
     }}
             />
           ) : null}
