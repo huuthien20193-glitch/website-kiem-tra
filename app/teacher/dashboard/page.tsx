@@ -109,7 +109,10 @@ export default function TeacherDashboard() {
         durationMinutes: exam.durationMinutes,
         totalPoints: exam.totalPoints,
         mcqCount: exam.mcqCount,
-        essayQuestions: exam.essayQuestions.length,
+        essayQuestions: exam.essayQuestions,
+        mcqImages: exam.mcqImages ?? [],
+        mcqPointPerQ: exam.mcqPointPerQ ?? 0,
+        mcqAnswers: exam.mcqAnswers ?? [],
       }
       supabase.from('exams').insert(examData).then((res) => {
         setExams((prev) => [...prev, { id: Date.now().toString(), ...examData } as Exam])
