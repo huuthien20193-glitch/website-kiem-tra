@@ -70,7 +70,17 @@ export function SubmissionsTab({
         setLoading(false);
       }
     }
+
+    // Chạy ngay khi component mount
     loadSubmissions();
+
+    // ✅ THÊM: Lắng nghe khi tab/window được focus lại → refresh submissions
+    const handleFocus = () => {
+      loadSubmissions();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
   const pendingCount = submissions.filter((submission) => isPending(submission.status)).length;

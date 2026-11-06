@@ -59,6 +59,20 @@ export default function TeacherDashboard() {
     }
   }, [isClient, router, session.role]);
 
+  // ✅ THÊM: Lắng nghe khi tab/window được focus lại → refresh submissions từ Supabase
+  useEffect(() => {
+    const handleFocus = () => {
+      const supabase = createClient();
+      if (supabase) {
+        supabase.from('submissions').select('*').order('submitted_at', { ascending: false }).then(({ data }) => {
+          setSubmissions((data || []).map(mapRowToSubmission));
+        });
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [createClient]);
+
   const pendingCount = submissions.filter((submission) => isPending(submission.status)).length;
 
   const navigate = (tab: TeacherTab) => {
