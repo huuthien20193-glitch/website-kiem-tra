@@ -21,7 +21,7 @@ export type Exam = {
   id: string;
   title: string;
   subject: string;
-  /** Khối lớp: 9, 10, 11 hoặc 12. Đề cũ chưa phân khối sẽ là undefined. */
+  /** Khối lớp: 6 đến 12. Đề cũ chưa phân khối sẽ là undefined. */
   grade?: Grade;
   durationMinutes: number;
   totalPoints: number;
@@ -70,7 +70,7 @@ export type TeacherTab = 'overview' | 'exams' | 'create-exam' | 'submissions';
 export const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
 /** Các khối lớp được hỗ trợ khi đăng đề. */
-export const GRADES = [9, 10, 11, 12] as const;
+export const GRADES = [6, 7, 8, 9, 10, 11, 12] as const;
 export type Grade = (typeof GRADES)[number];
 
 export function gradeLabel(grade?: number | null): string {

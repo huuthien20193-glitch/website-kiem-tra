@@ -313,7 +313,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
               <GraduationCap className="size-3.5 text-emerald-500" />
               Khối lớp <span className="text-rose-500">*</span>
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
               {GRADES.map((item) => (
                 <button
                   key={item}
