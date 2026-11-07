@@ -1,4 +1,5 @@
-import type { EssayDetail, EssayQuestion, Exam, Submission, SubPart } from './types';
+import type { EssayDetail, EssayQuestion, Exam, Grade, Submission, SubPart } from './types';
+import { GRADES } from './types';
 import { round1 } from './utils';
 
 export const STORAGE_KEYS = {
@@ -78,11 +79,14 @@ export function normalizeExam(raw: Partial<Exam>): Exam {
     const value = Array.isArray(raw?.mcqAnswers) ? asNumber(raw.mcqAnswers[index], 0) : 0;
     return clamp(Math.round(value), 0, 3);
   });
+  const gradeValue = Number(raw?.grade);
+  const grade = GRADES.includes(gradeValue as Grade) ? (gradeValue as Grade) : undefined;
 
   return {
     id: String(raw?.id ?? `exam-${Date.now()}`),
     title: typeof raw?.title === 'string' && raw.title ? raw.title : 'Đề kiểm tra chưa đặt tên',
     subject: typeof raw?.subject === 'string' && raw.subject ? raw.subject : 'Toán học',
+    grade,
     durationMinutes: clamp(Math.round(asNumber(raw?.durationMinutes, 45)), 1, 600),
     totalPoints: Math.max(0, asNumber(raw?.totalPoints, 10)),
     status: typeof raw?.status === 'string' ? raw.status : 'Đã xuất bản',
@@ -170,6 +174,7 @@ export function seedExam(): Exam {
     id: 'seed-toan-9-giua-ki',
     title: 'Kiểm tra giữa kì I – Toán 9',
     subject: 'Toán học',
+    grade: 9,
     durationMinutes: 45,
     totalPoints: 10,
     status: 'Đã xuất bản',

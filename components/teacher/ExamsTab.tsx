@@ -5,14 +5,15 @@ import {
   Clock3,
   Copy,
   Download,
+  GraduationCap,
   Layers,
   Plus,
   Search,
   Trash2,
   X,
 } from 'lucide-react';
-import type { Exam } from '@/lib/types';
-import { subjectStyle } from '@/lib/types';
+import type { Exam, Grade } from '@/lib/types';
+import { GRADES, gradeLabel, subjectStyle } from '@/lib/types';
 import { cn, formatDate, formatNumber } from '@/lib/utils';
 
 type ExamsTabProps = {
@@ -20,13 +21,25 @@ type ExamsTabProps = {
   onCreate: () => void;
   onDelete: (exam: Exam) => void;
   onDuplicate: (exam: Exam) => void;
+  onUpdateGrade: (exam: Exam, grade: Grade) => void | Promise<void>;
 };
 
-export function ExamsTab({ exams, onCreate, onDelete, onDuplicate }: ExamsTabProps) {
+export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade }: ExamsTabProps) {
   const [keyword, setKeyword] = useState('');
   const [subject, setSubject] = useState('all');
+  const [gradeFilter, setGradeFilter] = useState<'all' | 'none' | Grade>('all');
 
   const subjects = useMemo(() => Array.from(new Set(exams.map((exam) => exam.subject))).sort(), [exams]);
+
+  const gradeCounts = useMemo(() => {
+    const counts = Object.fromEntries(GRADES.map((item) => [item, 0])) as Record<Grade, number>;
+    let unassigned = 0;
+    exams.forEach((exam) => {
+      if (exam.grade) counts[exam.grade] += 1;
+      else unassigned += 1;
+    });
+    return { counts, unassigned };
+  }, [exams]);
 
   const filtered = useMemo(() => {
     const query = keyword.trim().toLowerCase();
@@ -34,11 +47,15 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate }: ExamsTabPro
       const matchesKeyword =
         !query ||
         exam.title.toLowerCase().includes(query) ||
-        exam.subject.toLowerCase().includes(query);
+        exam.subject.toLowerCase().includes(query) ||
+        (exam.grade ? `lớp ${exam.grade}`.includes(query) : false);
       const matchesSubject = subject === 'all' || exam.subject === subject;
-      return matchesKeyword && matchesSubject;
+      const matchesGrade =
+        gradeFilter === 'all' ||
+        (gradeFilter === 'none' ? !exam.grade : exam.grade === gradeFilter);
+      return matchesKeyword && matchesSubject && matchesGrade;
     });
-  }, [exams, keyword, subject]);
+  }, [exams, keyword, subject, gradeFilter]);
 
   /* ---------- Xuất PDF (client-side) ---------- */
   const exportToPdf = async (exam: Exam) => {
@@ -68,7 +85,7 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate }: ExamsTabPro
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(90, 90, 90);
     doc.text(
-      `Môn: ${exam.subject}   |   Thời gian: ${exam.durationMinutes} phút   |   Tổng điểm: ${exam.totalPoints}`,
+      `Môn: ${exam.subject}   |   ${gradeLabel(exam.grade)}   |   Thời gian: ${exam.durationMinutes} phút   |   Tổng điểm: ${exam.totalPoints}`,
       margin,
       y,
       { align: 'center' },
@@ -239,6 +256,41 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate }: ExamsTabPro
         </span>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        {([
+          { key: 'all' as const, label: 'Tất cả', count: exams.length },
+          ...GRADES.map((item) => ({ key: item, label: gradeLabel(item), count: gradeCounts.counts[item] })),
+          ...(gradeCounts.unassigned > 0
+            ? [{ key: 'none' as const, label: 'Chưa phân khối', count: gradeCounts.unassigned }]
+            : []),
+        ]).map((tab) => {
+          const active = gradeFilter === tab.key;
+          return (
+            <button
+              key={String(tab.key)}
+              type="button"
+              onClick={() => setGradeFilter(tab.key)}
+              className={cn(
+                'inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition',
+                active
+                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                  : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700',
+              )}
+            >
+              {tab.label}
+              <span
+                className={cn(
+                  'rounded-full px-1.5 py-0.5 text-[10px] font-black',
+                  active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500',
+                )}
+              >
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-20 text-center">
           <span className="flex size-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
@@ -251,7 +303,7 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate }: ExamsTabPro
             <p className="mt-1 text-sm text-slate-400">
               {exams.length === 0
                 ? 'Tạo đề đầu tiên để học sinh có thể bắt đầu làm bài.'
-                : 'Thử từ khóa khác hoặc bỏ bộ lọc môn học.'}
+                : 'Thử từ khóa khác hoặc bỏ bộ lọc môn học / khối lớp.'}
             </p>
           </div>
           {exams.length === 0 ? (
@@ -268,6 +320,7 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate }: ExamsTabPro
               onClick={() => {
                 setKeyword('');
                 setSubject('all');
+                setGradeFilter('all');
               }}
               className="text-sm font-bold text-emerald-700 hover:underline"
             >
@@ -285,9 +338,37 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate }: ExamsTabPro
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 opacity-0 transition group-hover:opacity-100" />
 
               <div className="flex items-start justify-between gap-3">
-                <span className={cn('rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ring-1', subjectStyle(exam.subject))}>
-                  {exam.subject}
-                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className={cn('rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ring-1', subjectStyle(exam.subject))}>
+                    {exam.subject}
+                  </span>
+                  <label
+                    className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-600/10"
+                    title="Đổi khối lớp"
+                  >
+                    <GraduationCap className="size-3 shrink-0" />
+                    <select
+                      value={exam.grade ?? ''}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (GRADES.includes(value as Grade)) {
+                          void onUpdateGrade(exam, value as Grade);
+                        }
+                      }}
+                      className="cursor-pointer bg-transparent text-[10px] font-black uppercase tracking-wide text-indigo-700 outline-none"
+                      aria-label="Khối lớp của đề"
+                    >
+                      <option value="" disabled>
+                        Chưa phân khối
+                      </option>
+                      {GRADES.map((item) => (
+                        <option key={item} value={item}>
+                          Lớp {item}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"

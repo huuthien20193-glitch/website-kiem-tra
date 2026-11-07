@@ -6,6 +6,7 @@ Dự án Next.js 16 (App Router) hỗ trợ giáo viên tạo đề kiểm tra, 
 
 - **Đăng nhập/đăng ký thực tế** (Supabase Auth) – giáo viên và học sinh
 - **Tạo đề kiểm tra** – trắc nghiệm, tự luận, dạng ảnh
+- **Phân loại theo khối lớp** – Lớp 9, 10, 11, 12 với bộ lọc riêng cho giáo viên và học sinh
 - **Tạo đề bằng AI** – nhập chủ đề hoặc upload file PDF/Word, AI sinh đề tự động
 - **Quản lý lớp học** – tạo lớp, mời học sinh, theo dõi tiến độ
 - **Làm thi online real-time** – đếm ngược thời gian, nộp bài tự động

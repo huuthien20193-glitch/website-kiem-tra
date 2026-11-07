@@ -15,7 +15,7 @@ import {
   ZoomIn,
 } from 'lucide-react';
 import type { Exam, Submission } from '@/lib/types';
-import { OPTION_LABELS, subjectStyle } from '@/lib/types';
+import { OPTION_LABELS, gradeLabel, subjectStyle } from '@/lib/types';
 import { cn, formatClock, formatNumber, progressPercent } from '@/lib/utils';
 import {
   addSubmission,
@@ -278,6 +278,9 @@ export function ExamRoom({
             <div className="flex items-center gap-2">
               <span className={cn('hidden rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ring-1 sm:inline-flex', subjectStyle(exam.subject))}>
                 {exam.subject}
+              </span>
+              <span className="hidden rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-600/10 sm:inline-flex">
+                {gradeLabel(exam.grade)}
               </span>
               {practiceMode ? (
                 <span className="hidden rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1 sm:inline-flex bg-teal-50 text-teal-700 ring-teal-600/10">

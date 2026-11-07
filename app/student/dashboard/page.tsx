@@ -19,8 +19,8 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
-import type { Exam, Submission } from '@/lib/types';
-import { subjectStyle } from '@/lib/types';
+import type { Exam, Grade, Submission } from '@/lib/types';
+import { GRADES, gradeLabel, subjectStyle } from '@/lib/types';
 import { cn, formatNumber, initials, isPending } from '@/lib/utils';
 import {
   clearSession,
@@ -51,6 +51,7 @@ export default function StudentDashboard() {
     typeof window === 'undefined' ? '' : getStudentProfile().name,
   );
   const [keyword, setKeyword] = useState('');
+  const [gradeFilter, setGradeFilter] = useState<'all' | 'none' | Grade>('all');
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [result, setResult] = useState<Submission | null>(null);
   const [practiceMode, setPracticeMode] = useState(false);
@@ -127,13 +128,30 @@ export default function StudentDashboard() {
 
   const pendingCount = mySubmissions.filter((submission) => isPending(submission.status)).length;
 
+  const gradeCounts = useMemo(() => {
+    const counts = Object.fromEntries(GRADES.map((item) => [item, 0])) as Record<Grade, number>;
+    let unassigned = 0;
+    exams.forEach((exam) => {
+      if (exam.grade) counts[exam.grade] += 1;
+      else unassigned += 1;
+    });
+    return { counts, unassigned };
+  }, [exams]);
+
   const filteredExams = useMemo(() => {
     const query = keyword.trim().toLowerCase();
-    if (!query) return exams;
-    return exams.filter(
-      (exam) => exam.title.toLowerCase().includes(query) || exam.subject.toLowerCase().includes(query),
-    );
-  }, [exams, keyword]);
+    return exams.filter((exam) => {
+      const matchesKeyword =
+        !query ||
+        exam.title.toLowerCase().includes(query) ||
+        exam.subject.toLowerCase().includes(query) ||
+        (exam.grade ? `lớp ${exam.grade}`.includes(query) : false);
+      const matchesGrade =
+        gradeFilter === 'all' ||
+        (gradeFilter === 'none' ? !exam.grade : exam.grade === gradeFilter);
+      return matchesKeyword && matchesGrade;
+    });
+  }, [exams, keyword, gradeFilter]);
 
   const handleStartExam = (exam: Exam, mode: 'official' | 'practice' = 'official') => {
     if (!studentName.trim()) {
@@ -350,6 +368,41 @@ export default function StudentDashboard() {
             </button>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2">
+            {([
+              { key: 'all' as const, label: 'Tất cả', count: exams.length },
+              ...GRADES.map((item) => ({ key: item, label: gradeLabel(item), count: gradeCounts.counts[item] })),
+              ...(gradeCounts.unassigned > 0
+                ? [{ key: 'none' as const, label: 'Chưa phân khối', count: gradeCounts.unassigned }]
+                : []),
+            ]).map((tab) => {
+              const active = gradeFilter === tab.key;
+              return (
+                <button
+                  key={String(tab.key)}
+                  type="button"
+                  onClick={() => setGradeFilter(tab.key)}
+                  className={cn(
+                    'inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition',
+                    active
+                      ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                      : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700',
+                  )}
+                >
+                  {tab.label}
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 py-0.5 text-[10px] font-black',
+                      active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500',
+                    )}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           {filteredExams.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
               <span className="flex size-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
@@ -362,9 +415,21 @@ export default function StudentDashboard() {
                 <p className="mt-1 text-xs text-slate-400">
                   {exams.length === 0
                     ? 'Vui lòng chờ giáo viên công bố đề kiểm tra.'
-                    : 'Thử tìm với từ khóa khác.'}
+                    : 'Thử từ khóa khác hoặc chọn khối lớp khác.'}
                 </p>
               </div>
+              {exams.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setKeyword('');
+                    setGradeFilter('all');
+                  }}
+                  className="text-xs font-bold text-emerald-700 hover:underline"
+                >
+                  Xóa bộ lọc
+                </button>
+              ) : null}
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
@@ -375,9 +440,15 @@ export default function StudentDashboard() {
                 >
                   <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 opacity-0 transition group-hover:opacity-100" />
                   <div className="flex items-start justify-between gap-3">
-                    <span className={cn('rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ring-1', subjectStyle(exam.subject))}>
-                      {exam.subject}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className={cn('rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ring-1', subjectStyle(exam.subject))}>
+                        {exam.subject}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-600/10">
+                        <GraduationCap className="size-3" />
+                        {gradeLabel(exam.grade)}
+                      </span>
+                    </div>
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
                       <span className="size-1.5 rounded-full bg-emerald-500" />
                       Đang mở

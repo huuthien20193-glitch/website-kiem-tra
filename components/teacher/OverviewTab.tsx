@@ -12,7 +12,7 @@ import {
   Users,
 } from 'lucide-react';
 import type { Exam, Submission, TeacherTab } from '@/lib/types';
-import { subjectStyle } from '@/lib/types';
+import { gradeLabel, subjectStyle } from '@/lib/types';
 import { cn, formatNumber, initials, isPending, progressPercent, todayLabel } from '@/lib/utils';
 
 type OverviewTabProps = {
@@ -256,6 +256,7 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
                         <span className="block truncate text-xs font-bold text-slate-800">{exam.title}</span>
                         <span className="mt-0.5 flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">
                           <span className={cn('rounded-full px-1.5 py-0.5 ring-1', subjectStyle(exam.subject))}>{exam.subject}</span>
+                          <span>· {gradeLabel(exam.grade)}</span>
                           <span>· {exam.durationMinutes} phút</span>
                         </span>
                       </span>

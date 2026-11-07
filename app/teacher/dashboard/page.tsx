@@ -15,7 +15,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import type { Exam, Submission, TeacherTab } from '@/lib/types'
+import type { Exam, Grade, Submission, TeacherTab } from '@/lib/types'
 import { clearSession, getSession, loadExams, loadSubmissions, saveExams } from '@/lib/storage'
 import { cn, formatNumber, isPending } from '@/lib/utils'
 import { downloadCsv } from '@/lib/export'
@@ -150,6 +150,20 @@ export default function TeacherDashboard() {
     setExams(next)
     saveExams(next)
     toast.success('Đã xóa đề kiểm tra')
+  }
+
+  const handleUpdateExamGrade = async (exam: Exam, grade: Grade) => {
+    const updated: Exam = { ...exam, grade }
+    setExams((current) => current.map((item) => (item.id === exam.id ? updated : item)))
+
+    const result = await saveExamToCloud(updated)
+    if (!result.ok) {
+      toast.error('Không thể đổi khối lớp', result.message ?? 'Vui lòng thử lại.')
+      void fetchExams()
+      return
+    }
+
+    toast.success('Đã đổi khối lớp', `${exam.title} → Lớp ${grade}`)
   }
 
   const handleDeleteSubmission = async (id: string) => {
@@ -406,6 +420,7 @@ export default function TeacherDashboard() {
               onDuplicate={() => {
                 toast.info('Chức năng sắp ra mắt', 'Tính năng nhân bản đề đang được phát triển.')
               }}
+              onUpdateGrade={handleUpdateExamGrade}
             />
           ) : null}
 

@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Check,
   CircleAlert,
+  GraduationCap,
   ImagePlus,
   Layers,
   Plus,
@@ -11,8 +12,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import type { EssayQuestion, Exam, ExamType, SubPart } from '@/lib/types';
-import { OPTION_LABELS, SUBJECTS } from '@/lib/types';
+import type { EssayQuestion, Exam, ExamType, Grade, SubPart } from '@/lib/types';
+import { GRADES, OPTION_LABELS, SUBJECTS } from '@/lib/types';
 import { cn, formatNumber } from '@/lib/utils';
 import { imageFilesFromClipboard, optimizeImage } from '@/lib/image';
 import { useToast } from '@/components/ui/FeedbackProvider';
@@ -63,6 +64,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
 
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('Toán học');
+  const [grade, setGrade] = useState<Grade>(9);
   const [durationMinutes, setDurationMinutes] = useState(45);
   const [totalPoints, setTotalPoints] = useState(10);
   const [examType, setExamType] = useState<ExamType>('official');
@@ -185,6 +187,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
   const resetForm = () => {
     setTitle('');
     setSubject('Toán học');
+    setGrade(9);
     setDurationMinutes(45);
     setTotalPoints(10);
     setMcqImages([]);
@@ -213,6 +216,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
       id: newExamId(),
       title: title.trim(),
       subject,
+      grade,
       durationMinutes: Math.round(durationMinutes),
       totalPoints: Number(totalPoints),
       status: 'Đã xuất bản',
@@ -302,6 +306,33 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="mt-4">
+            <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wide text-slate-500">
+              <GraduationCap className="size-3.5 text-emerald-500" />
+              Khối lớp <span className="text-rose-500">*</span>
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {GRADES.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setGrade(item)}
+                  className={cn(
+                    'rounded-2xl border px-3 py-2.5 text-sm font-black transition',
+                    grade === item
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-500/20'
+                      : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-emerald-200 hover:text-emerald-700',
+                  )}
+                >
+                  Lớp {item}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[11px] font-medium text-slate-400">
+              Đề sẽ được nhóm theo khối này ở trang quản lý và trang làm bài của học sinh.
+            </p>
           </div>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
