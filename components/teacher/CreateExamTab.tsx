@@ -18,11 +18,23 @@ import { imageFilesFromClipboard, optimizeImage } from '@/lib/image';
 import { useToast } from '@/components/ui/FeedbackProvider';
 
 type CreateExamTabProps = {
-  onCreate: (exam: Exam) => boolean;
+  onCreate: (exam: Exam) => boolean | Promise<boolean>;
   onCancel: () => void;
 };
 
 const newId = () => `essay-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+// Cột exams.id là kiểu uuid trên Supabase nên mã đề phải là UUID hợp lệ.
+const newExamId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = (Math.random() * 16) | 0;
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+};
 
 const createEmptyEssay = (index: number): EssayQuestion => ({
   id: newId(),
@@ -61,6 +73,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
   const [mcqAnswers, setMcqAnswers] = useState<number[]>(Array(10).fill(0));
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [essayQuestions, setEssayQuestions] = useState<EssayQuestion[]>([createEmptyEssay(7)]);
 
@@ -181,7 +194,8 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
     setEssayQuestions([createEmptyEssay(7)]);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
     if (!title.trim()) {
       toast.error('Thiếu tên đề kiểm tra', 'Vui lòng nhập tên đề trước khi công bố.');
       return;
@@ -196,7 +210,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
     }
 
     const exam: Exam = {
-      id: `exam-${Date.now()}`,
+      id: newExamId(),
       title: title.trim(),
       subject,
       durationMinutes: Math.round(durationMinutes),
@@ -221,9 +235,14 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
       createdAt: new Date().toISOString(),
     };
 
-    const saved = onCreate(exam);
-    if (saved) {
-      resetForm();
+    setSaving(true);
+    try {
+      const saved = await onCreate(exam);
+      if (saved) {
+        resetForm();
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -722,10 +741,11 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
           <button
             type="button"
             onClick={handleSave}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 transition hover:from-emerald-700 hover:to-teal-700 active:scale-[0.98]"
+            disabled={saving}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 transition hover:from-emerald-700 hover:to-teal-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Save className="size-4" />
-            Lưu &amp; công bố đề
+            {saving ? 'Đang công bố...' : 'Lưu & công bố đề'}
           </button>
         </div>
       </div>

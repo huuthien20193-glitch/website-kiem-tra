@@ -16,11 +16,17 @@ import {
   X,
 } from 'lucide-react'
 import type { Exam, Submission, TeacherTab } from '@/lib/types'
-import { clearSession, getSession, loadExams } from '@/lib/storage'
+import { clearSession, getSession, loadExams, loadSubmissions, saveExams } from '@/lib/storage'
 import { cn, formatNumber, isPending } from '@/lib/utils'
 import { downloadCsv } from '@/lib/export'
 import { BrandLogo } from '@/components/ui/Brand'
-import { createClient, mapRowToSubmission } from '@/lib/supabase'
+import {
+  createClient,
+  deleteExamFromCloud,
+  fetchExamsFromCloud,
+  fetchSubmissionsFromCloud,
+  saveExamToCloud,
+} from '@/lib/supabase'
 import { useConfirm, useToast } from '@/components/ui/FeedbackProvider'
 import { useIsClient } from '@/lib/hooks'
 import { OverviewTab } from '@/components/teacher/OverviewTab'
@@ -46,40 +52,35 @@ export default function TeacherDashboard() {
   const [activeTab, setActiveTab] = useState<TeacherTab>('overview')
   const [exams, setExams] = useState<Exam[]>([])
   const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [submissionsLoading, setSubmissionsLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [gradingSubmission, setGradingSubmission] = useState<Submission | null>(null)
 
   const teacherName = session.username || 'Thầy Thiện'
 
-  // Tải danh sách đề thi từ Supabase
+  // Tải danh sách đề thi: ưu tiên Supabase, dự phòng localStorage khi mất mạng.
   const fetchExams = async () => {
-    const supabase = createClient()
-    if (!supabase) {
-      setExams(typeof window !== 'undefined' ? loadExams() : [])
+    const cloud = await fetchExamsFromCloud()
+    if (cloud) {
+      setExams(cloud)
+      saveExams(cloud)
       return
     }
-
-    const { data, error } = await supabase.from('exams').select('*')
-    if (error || !data) {
-      setExams(typeof window !== 'undefined' ? loadExams() : [])
-      return
-    }
-    setExams(data as Exam[])
+    setExams(typeof window !== 'undefined' ? loadExams() : [])
   }
 
-  // Tải danh sách bài nộp từ Supabase
+  // Tải danh sách bài nộp từ Supabase.
   const fetchSubmissions = async () => {
-    const supabase = createClient()
-    if (!supabase) return
-
-    const { data, error } = await supabase.from('submissions').select('*')
-    if (error) {
-      console.error('Không thể tải bài nộp:', error)
-      return
-    }
-    if (data) {
-      const formattedSubmissions = data.map((row) => mapRowToSubmission(row))
-      setSubmissions(formattedSubmissions)
+    setSubmissionsLoading(true)
+    try {
+      const cloud = await fetchSubmissionsFromCloud()
+      if (cloud) {
+        setSubmissions(cloud)
+        return
+      }
+      setSubmissions(typeof window !== 'undefined' ? loadSubmissions() : [])
+    } finally {
+      setSubmissionsLoading(false)
     }
   }
 
@@ -115,35 +116,19 @@ export default function TeacherDashboard() {
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const handleCreateExam = async (exam: any) => {
-    const supabase = createClient()
-    if (!supabase) {
-      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập biến môi trường Supabase.')
-      return
+  const handleCreateExam = async (exam: Exam): Promise<boolean> => {
+    const result = await saveExamToCloud(exam)
+    if (!result.ok) {
+      toast.error('Không thể công bố đề', result.message ?? 'Vui lòng thử lại.')
+      return false
     }
 
-    const examData = {
-      title: exam.title,
-      subject: exam.subject,
-      durationMinutes: exam.durationMinutes,
-      totalPoints: exam.totalPoints,
-      mcqCount: exam.mcqCount,
-      essayQuestions: exam.essayQuestions,
-      mcqImages: exam.mcqImages ?? [],
-      mcqPointPerQ: exam.mcqPointPerQ ?? 0,
-      mcqAnswers: exam.mcqAnswers ?? [],
-    }
-
-    const { data, error } = await supabase.from('exams').insert(examData).select().single()
-
-    if (error || !data) {
-      toast.error('Lỗi', 'Không thể công bố đề kiểm tra.')
-      return
-    }
-
-    setExams((prev) => [...prev, data as Exam])
+    const next = [exam, ...exams.filter((item) => item.id !== exam.id)]
+    setExams(next)
+    saveExams(next)
     toast.success('Đã công bố đề kiểm tra', exam.title)
     navigate('exams')
+    return true
   }
 
   const handleDeleteExam = async (exam: Exam) => {
@@ -155,16 +140,15 @@ export default function TeacherDashboard() {
     })
     if (!confirmed) return
 
-    const supabase = createClient()
-    if (!supabase) return
-
-    const { error } = await supabase.from('exams').delete().eq('id', exam.id)
-    if (error) {
-      toast.error('Lỗi', 'Không thể xóa đề kiểm tra.')
+    const result = await deleteExamFromCloud(exam.id)
+    if (!result.ok) {
+      toast.error('Lỗi', result.message ?? 'Không thể xóa đề kiểm tra.')
       return
     }
 
-    setExams(exams.filter((item) => item.id !== exam.id))
+    const next = exams.filter((item) => item.id !== exam.id)
+    setExams(next)
+    saveExams(next)
     toast.success('Đã xóa đề kiểm tra')
   }
 
@@ -421,17 +405,18 @@ export default function TeacherDashboard() {
               onDelete={handleDeleteExam}
               onDuplicate={() => {
                 toast.info('Chức năng sắp ra mắt', 'Tính năng nhân bản đề đang được phát triển.')
-                return true as boolean
               }}
             />
           ) : null}
 
           {activeTab === 'create-exam' ? (
-            <CreateExamTab onCreate={handleCreateExam as any} onCancel={() => navigate('exams')} />
+            <CreateExamTab onCreate={handleCreateExam} onCancel={() => navigate('exams')} />
           ) : null}
 
           {activeTab === 'submissions' ? (
             <SubmissionsTab
+              submissions={submissions}
+              isLoading={submissionsLoading}
               onGrade={(submission) => setGradingSubmission(submission)}
               onDelete={handleDeleteSubmission}
               onClearAll={handleClearAllSubmissions}

@@ -26,10 +26,12 @@ import {
   clearSession,
   getStudentProfile,
   loadExams,
+  loadSubmissions,
+  saveExams,
   saveStudentProfile,
   setStudentSession,
 } from '@/lib/storage';
-import { createClient, mapRowToSubmission } from '@/lib/supabase';
+import { fetchExamsFromCloud, fetchStudentSubmissionsFromCloud } from '@/lib/supabase';
 import { BrandLogo } from '@/components/ui/Brand';
 import { useToast } from '@/components/ui/FeedbackProvider';
 import { ExamRoom } from '@/components/student/ExamRoom';
@@ -59,23 +61,60 @@ export default function StudentDashboard() {
     return () => clearTimeout(timer);
   }, [isClient, studentName]);
 
-  useEffect(() => {
-    async function loadMySubmissions() {
-      const supabase = createClient();
-      if (!supabase || !studentName.trim()) return;
-      try {
-        const { data, error } = await supabase
-          .from('submissions')
-          .select('*')
-          .eq('student_name', studentName.trim())
-          .order('submitted_at', { ascending: false });
-        if (error) throw error;
-        setSubmissions((data || []).map(mapRowToSubmission));
-      } catch {
-        // Bỏ qua lỗi
-      }
+  // Tải đề thi từ Supabase để học sinh thấy đề giáo viên tạo trên máy khác.
+  const refreshExams = async () => {
+    const cloud = await fetchExamsFromCloud();
+    if (cloud) {
+      setExams(cloud);
+      saveExams(cloud);
+      return;
     }
-    loadMySubmissions();
+    setExams(loadExams());
+  };
+
+  // Tải bài nộp của chính học sinh từ Supabase.
+  const refreshMySubmissions = async () => {
+    const name = studentName.trim();
+    if (!name) {
+      setSubmissions([]);
+      return;
+    }
+
+    const cloud = await fetchStudentSubmissionsFromCloud(name);
+    if (cloud) {
+      setSubmissions(cloud);
+      return;
+    }
+
+    const local = loadSubmissions().filter(
+      (submission) => submission.studentName.trim().toLowerCase() === name.toLowerCase(),
+    );
+    setSubmissions(local);
+  };
+
+  useEffect(() => {
+    void refreshExams();
+    const handleFocus = () => {
+      void refreshExams();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void refreshMySubmissions();
+    }, 400);
+    const handleFocus = () => {
+      void refreshMySubmissions();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('focus', handleFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentName]);
 
   const mySubmissions = useMemo(() => {
@@ -118,40 +157,15 @@ export default function StudentDashboard() {
     toast.success('Đã nộp bài thành công', 'Kết quả trắc nghiệm đã được cập nhật ngay bên dưới.');
     if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
 
-    // Gửi bài nộp lên Supabase cloud để giáo viên thấy
-    const supabase = createClient();
-    if (supabase) {
-      try {
-        await supabase.from('submissions').insert({
-          exam_id: submission.examId,
-          student_id: submission.studentName,
-          student_name: submission.studentName,
-          student_class: submission.studentClass || null,
-          exam_title: submission.examTitle,
-          auto_score: submission.autoScore,
-          score: submission.score,
-          mcq_count: submission.mcqCount,
-          mcq_correct_count: submission.mcqCorrectCount,
-          student_mcq_answers: submission.studentMcqAnswers,
-          correct_mcq_answers: submission.correctMcqAnswers,
-          mcq_images: submission.mcqImages,
-          essay_details: submission.essayDetails,
-          status: submission.status,
-          submitted_at: submission.submittedAt,
-          time_spent_seconds: submission.timeSpentSeconds || 0,
-        });
-      } catch {
-        toast.warning('Lưu bài nộp', 'Không thể gửi bài nộp lên cloud. Bài làm đã lưu cục bộ.');
-      }
-    } else {
-      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập NEXT_PUBLIC_SUPABASE_URL và NEXT_PUBLIC_SUPABASE_ANON_KEY trong .env.local.');
-    }
+    // ExamRoom đã ghi bài nộp lên Supabase; tại đây chỉ cần tải lại danh sách.
+    await refreshMySubmissions();
+    void refreshExams();
   };
 
   const handleBack = () => {
     setResult(null);
     setSelectedExam(null);
-    setSubmissions([]);
+    void refreshMySubmissions();
     if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
   };
 
@@ -466,7 +480,7 @@ export default function StudentDashboard() {
 
         <p className="flex items-center justify-center gap-1.5 pt-2 text-center text-[11px] font-medium text-slate-400">
           <Inbox className="size-3.5" />
-          Bài làm được lưu trên thiết bị này và gửi tới giáo viên quản lý lớp.
+          Bài làm được đồng bộ lên máy chủ và gửi tới giáo viên quản lý lớp.
         </p>
       </main>
     </div>

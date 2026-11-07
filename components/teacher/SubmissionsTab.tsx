@@ -1,23 +1,25 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Award,
   CheckCircle2,
   Clock3,
   Download,
   Inbox,
+  LoaderCircle,
   Search,
   Trash2,
   X,
 } from 'lucide-react'
-import { createClient, mapRowToSubmission } from '@/lib/supabase'
 import type { Submission } from '@/lib/types'
 import { cn, formatNumber, initials, isPending } from '@/lib/utils'
 
 type StatusFilter = 'all' | 'pending' | 'done'
 
 type SubmissionsTabProps = {
+  submissions: Submission[]
+  isLoading?: boolean
   onGrade: (submission: Submission) => void
   onDelete: (id: string) => void
   onClearAll: () => void
@@ -40,48 +42,15 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function SubmissionsTab({
+  submissions,
+  isLoading = false,
   onGrade,
   onDelete,
   onClearAll,
   onExport,
 }: SubmissionsTabProps) {
-  const [submissions, setSubmissions] = useState<Submission[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const [keyword, setKeyword] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-
-  useEffect(() => {
-    async function loadSubmissions() {
-      const supabase = createClient()
-      if (!supabase) {
-        setIsLoading(false)
-        return
-      }
-      try {
-        const { data, error } = await supabase
-          .from('submissions')
-          .select('*')
-          .order('submitted_at', { ascending: false })
-        if (error) throw error
-        setSubmissions((data || []).map(mapRowToSubmission))
-      } catch {
-        // Bỏ qua lỗi load
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    // Chạy ngay khi component mount
-    loadSubmissions()
-
-    // ✅ THÊM: Lắng nghe khi tab/window được focus lại → refresh submissions
-    const handleFocus = () => {
-      loadSubmissions()
-    }
-    window.addEventListener('focus', handleFocus)
-
-    return () => window.removeEventListener('focus', handleFocus)
-  }, [])
 
   const pendingCount = submissions.filter((submission) => isPending(submission.status)).length
   const gradedCount = submissions.length - pendingCount
@@ -216,7 +185,12 @@ export function SubmissionsTab({
           </div>
         </div>
 
-        {filtered.length === 0 ? (
+        {isLoading && submissions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+            <LoaderCircle className="size-7 animate-spin text-emerald-500" />
+            <p className="text-sm font-bold text-slate-600">Đang tải bài nộp từ máy chủ...</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
             <span className="flex size-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
               <Inbox className="size-7" />

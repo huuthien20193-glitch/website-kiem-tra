@@ -18,6 +18,7 @@ import type { Exam, Submission } from '@/lib/types';
 import { OPTION_LABELS, subjectStyle } from '@/lib/types';
 import { cn, formatClock, formatNumber, progressPercent } from '@/lib/utils';
 import {
+  addSubmission,
   buildSubmission,
   clearDraft,
   examDraftKey,
@@ -25,7 +26,7 @@ import {
   saveDraft,
 } from '@/lib/storage';
 import { imageFilesFromClipboard, optimizeImage } from '@/lib/image';
-import { createClient, SubmissionRow } from '@/lib/supabase';
+import { insertSubmissionToCloud } from '@/lib/supabase';
 import { useConfirm, useToast } from '@/components/ui/FeedbackProvider';
 
 type ExamRoomProps = {
@@ -114,38 +115,26 @@ export function ExamRoom({
   const submit = async (auto = false) => {
     if (submittedRef.current) return;
     submittedRef.current = true;
-    const submission = buildSubmission(exam, studentName, studentClass, answersRef.current, imagesRef.current);
+    const submission: Submission = {
+      ...buildSubmission(exam, studentName, studentClass, answersRef.current, imagesRef.current),
+      timeSpentSeconds: Math.max(0, totalSeconds - timeLeft),
+    };
     clearDraft(draftKey);
+    // Luôn lưu một bản cục bộ để không mất bài khi mạng/cloud gặp sự cố.
+    addSubmission(submission);
     if (auto) {
       toast.warning('Hết giờ làm bài', 'Hệ thống đã tự động nộp bài làm của bạn.');
     }
-    // Gửi bài nộp lên Supabase cloud để giáo viên thấy trên mọi thiết bị
-    const supabase = createClient();
-    if (supabase) {
-      try {
-        await supabase.from('submissions').insert({
-          exam_id: exam.id,
-          student_id: studentName,
-          student_name: studentName,
-          student_class: studentClass || null,
-          exam_title: exam.title,
-          auto_score: submission.autoScore,
-          score: submission.score,
-          mcq_count: submission.mcqCount,
-          mcq_correct_count: submission.mcqCorrectCount,
-          student_mcq_answers: submission.studentMcqAnswers,
-          correct_mcq_answers: submission.correctMcqAnswers,
-          mcq_images: submission.mcqImages,
-          essay_details: submission.essayDetails,
-          status: submission.status,
-          submitted_at: submission.submittedAt,
-        } as SubmissionRow);
-      } catch {
-        toast.warning('Lưu bài nộp', 'Không thể gửi bài nộp lên cloud. Dữ liệu đã lưu cục bộ.');
-      }
-    } else {
-      toast.warning('Chưa cấu hình Supabase', 'Vui lòng thiết lập NEXT_PUBLIC_SUPABASE_URL và NEXT_PUBLIC_SUPABASE_ANON_KEY trong .env.local.');
+
+    // Ghi bài nộp lên Supabase để giáo viên thấy trên mọi thiết bị.
+    const result = await insertSubmissionToCloud(submission);
+    if (!result.ok) {
+      toast.warning(
+        'Chưa đồng bộ được lên máy chủ',
+        `${result.message ?? 'Vui lòng kiểm tra kết nối mạng.'} Bài làm vẫn được lưu trên thiết bị này.`,
+      );
     }
+
     onSubmitted(submission);
   };
 

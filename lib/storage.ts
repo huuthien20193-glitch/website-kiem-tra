@@ -161,6 +161,7 @@ export function normalizeSubmission(raw: Partial<Submission>): Submission {
         : typeof (raw as { timestamp?: string })?.timestamp === 'string'
           ? (raw as { timestamp?: string }).timestamp!
           : new Date().toLocaleString('vi-VN'),
+    timeSpentSeconds: Math.max(0, Math.round(asNumber(raw?.timeSpentSeconds, 0))),
   };
 }
 
