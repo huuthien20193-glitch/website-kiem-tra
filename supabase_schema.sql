@@ -23,6 +23,7 @@ create table if not exists submissions (
   student_mcq_answers jsonb default '[]'::jsonb,
   correct_mcq_answers jsonb default '[]'::jsonb,
   mcq_images jsonb default '[]'::jsonb,
+  short_answer_details jsonb default '[]'::jsonb,
   essay_details jsonb default '[]'::jsonb,
   status text default 'pending',
   submitted_at timestamptz default now(),
@@ -32,6 +33,7 @@ create table if not exists submissions (
 -- Bổ sung cột còn thiếu nếu bảng đã được tạo từ phiên bản cũ.
 alter table submissions add column if not exists time_spent_seconds integer default 0;
 alter table submissions add column if not exists mcq_images jsonb default '[]'::jsonb;
+alter table submissions add column if not exists short_answer_details jsonb default '[]'::jsonb;
 alter table submissions add column if not exists essay_details jsonb default '[]'::jsonb;
 alter table submissions add column if not exists student_mcq_answers jsonb default '[]'::jsonb;
 alter table submissions add column if not exists correct_mcq_answers jsonb default '[]'::jsonb;

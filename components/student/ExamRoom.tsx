@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import type { Exam, Submission } from '@/lib/types';
 import { OPTION_LABELS, gradeLabel, subjectStyle } from '@/lib/types';
-import { cn, formatClock, formatNumber, progressPercent } from '@/lib/utils';
+import { answerMatches, cn, formatClock, formatNumber, progressPercent, round1 } from '@/lib/utils';
 import {
   addSubmission,
   buildSubmission,
@@ -60,6 +60,7 @@ export function ExamRoom({
     const deadline = draft?.deadline && draft.deadline > now ? draft.deadline : now + totalSeconds * 1000;
     return {
       mcqAnswers: draft?.mcqAnswers || {},
+      shortAnswers: draft?.shortAnswers || {},
       essayImages: draft?.essayImages || {},
       deadline,
       timeLeft: Math.max(0, Math.ceil((deadline - now) / 1000)),
@@ -67,15 +68,20 @@ export function ExamRoom({
   });
 
   const [mcqAnswers, setMcqAnswers] = useState<Record<number, number>>(restored.mcqAnswers);
+  const [shortAnswers, setShortAnswers] = useState<Record<string, string>>(
+    restored.shortAnswers,
+  );
   const [essayImages, setEssayImages] = useState<Record<string, string[]>>(restored.essayImages);
   const [timeLeft, setTimeLeft] = useState(restored.timeLeft);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [practiceFinished, setPracticeFinished] = useState(false);
   const [practiceScore, setPracticeScore] = useState(0);
+  const [practiceCorrect, setPracticeCorrect] = useState({ mcq: 0, short: 0 });
   const [activeFeedback, setActiveFeedback] = useState<{ questionIndex: number; correct: boolean } | null>(null);
 
   const answersRef = useRef<Record<number, number>>(restored.mcqAnswers);
+  const shortAnswersRef = useRef<Record<string, string>>(restored.shortAnswers);
   const imagesRef = useRef<Record<string, string[]>>(restored.essayImages);
   const deadlineRef = useRef<number>(restored.deadline);
   const submittedRef = useRef(false);
@@ -100,6 +106,10 @@ export function ExamRoom({
   }, [mcqAnswers]);
 
   useEffect(() => {
+    shortAnswersRef.current = shortAnswers;
+  }, [shortAnswers]);
+
+  useEffect(() => {
     imagesRef.current = essayImages;
   }, [essayImages]);
 
@@ -107,16 +117,24 @@ export function ExamRoom({
     if (practiceMode) return;
     saveDraft(draftKey, {
       mcqAnswers,
+      shortAnswers,
       essayImages,
       deadline: deadlineRef.current,
     });
-  }, [draftKey, essayImages, mcqAnswers, practiceMode]);
+  }, [draftKey, essayImages, mcqAnswers, practiceMode, shortAnswers]);
 
   const submit = async (auto = false) => {
     if (submittedRef.current) return;
     submittedRef.current = true;
     const submission: Submission = {
-      ...buildSubmission(exam, studentName, studentClass, answersRef.current, imagesRef.current),
+      ...buildSubmission(
+        exam,
+        studentName,
+        studentClass,
+        answersRef.current,
+        shortAnswersRef.current,
+        imagesRef.current,
+      ),
       timeSpentSeconds: Math.max(0, totalSeconds - timeLeft),
     };
     clearDraft(draftKey);
@@ -147,15 +165,24 @@ export function ExamRoom({
     return index >= 0 && index < exam.mcqCount && Number.isFinite(mcqAnswers[index]);
   }).length;
 
+  const shortAnsweredCount = exam.shortAnswerQuestions.filter(
+    (question) => (shortAnswers[String(question.id)] || '').trim().length > 0,
+  ).length;
+
   const essayAnsweredCount = exam.essayQuestions.filter(
     (question) => (essayImages[String(question.id)] || []).length > 0,
   ).length;
 
-  const totalSteps = exam.mcqCount + exam.essayQuestions.length;
-  const answeredSteps = Math.min(exam.mcqCount, mcqAnsweredCount) + essayAnsweredCount;
+  const totalSteps =
+    exam.mcqCount + exam.shortAnswerQuestions.length + exam.essayQuestions.length;
+  const answeredSteps =
+    Math.min(exam.mcqCount, mcqAnsweredCount) + shortAnsweredCount + essayAnsweredCount;
   const percent = progressPercent(answeredSteps, totalSteps);
   const urgent = timeLeft <= 300;
   const warning = timeLeft <= 600 && !urgent;
+  const shortAnswerSectionNumber = exam.mcqCount > 0 ? 2 : 1;
+  const essaySectionNumber =
+    (exam.mcqCount > 0 ? 1 : 0) + (exam.shortAnswerQuestions.length > 0 ? 1 : 0) + 1;
 
   const chooseAnswer = (questionIndex: number, optionIndex: number) => {
     setMcqAnswers((current) => ({ ...current, [questionIndex]: optionIndex }));
@@ -199,12 +226,17 @@ export function ExamRoom({
     }
     if (submittedRef.current) return;
     const unansweredMcq = Math.max(0, exam.mcqCount - mcqAnsweredCount);
+    const unansweredShort = Math.max(
+      0,
+      exam.shortAnswerQuestions.length - shortAnsweredCount,
+    );
     const missingEssayImages = exam.essayQuestions.filter(
       (question) => (essayImages[String(question.id)] || []).length === 0,
     ).length;
 
     const warnings: string[] = [];
     if (unansweredMcq > 0) warnings.push(`${unansweredMcq} câu trắc nghiệm chưa trả lời`);
+    if (unansweredShort > 0) warnings.push(`${unansweredShort} câu trả lời ngắn chưa điền`);
     if (missingEssayImages > 0) warnings.push(`${missingEssayImages} câu tự luận chưa nộp ảnh`);
 
     const confirmed = await confirm({
@@ -222,12 +254,27 @@ export function ExamRoom({
   };
 
   const handleFinishPractice = () => {
-    let correctCount = 0;
+    let correctMcq = 0;
     for (let index = 0; index < exam.mcqCount; index += 1) {
-      if (mcqAnswers[index] === exam.mcqAnswers[index]) correctCount += 1;
+      if (mcqAnswers[index] === exam.mcqAnswers[index]) correctMcq += 1;
     }
-    const score = correctCount * (exam.mcqPointPerQ || 0);
+
+    let correctShort = 0;
+    const shortScore = exam.shortAnswerQuestions.reduce((sum, question) => {
+      const isCorrect = answerMatches(
+        shortAnswers[String(question.id)] || '',
+        question.answer,
+      );
+      if (isCorrect) {
+        correctShort += 1;
+        return sum + question.points;
+      }
+      return sum;
+    }, 0);
+
+    const score = round1(correctMcq * (exam.mcqPointPerQ || 0) + shortScore);
     setPracticeScore(score);
+    setPracticeCorrect({ mcq: correctMcq, short: correctShort });
     const percent = Math.round((score / (exam.totalPoints || 1)) * 100);
     setPracticeFinished(true);
     // Store lightweight practice result in session storage for the result view.
@@ -236,8 +283,9 @@ export function ExamRoom({
       JSON.stringify({
         examTitle: exam.title,
         subject: exam.subject,
-        correctCount,
+        correctCount: correctMcq + correctShort,
         mcqCount: exam.mcqCount,
+        shortCount: exam.shortAnswerQuestions.length,
         score,
         totalPoints: exam.totalPoints,
         percent,
@@ -290,7 +338,8 @@ export function ExamRoom({
               <h1 className="truncate text-sm font-black text-slate-900 sm:text-base">{exam.title}</h1>
             </div>
             <p className="truncate text-[11px] font-semibold text-slate-400">
-              {studentName} · {exam.mcqCount} câu TN · {exam.essayQuestions.length} câu TL
+              {studentName} · {exam.mcqCount} câu TN · {exam.shortAnswerQuestions.length} câu TLN ·{' '}
+              {exam.essayQuestions.length} câu TL
             </p>
           </div>
 
@@ -445,11 +494,108 @@ export function ExamRoom({
             </section>
           ) : null}
 
+          {exam.shortAnswerQuestions.length > 0 ? (
+            <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex size-8 items-center justify-center rounded-xl bg-sky-600 text-xs font-black text-white">
+                    {shortAnswerSectionNumber}
+                  </span>
+                  <div>
+                    <h2 className="text-sm font-black text-slate-900">Phần trả lời ngắn</h2>
+                    <p className="text-[11px] font-medium text-slate-400">
+                      Điền đáp án ngắn cho từng câu — hệ thống tự chấm ngay khi nộp bài
+                    </p>
+                  </div>
+                </div>
+                <span className="rounded-full bg-sky-50 px-3 py-1 text-[11px] font-black text-sky-700">
+                  Đã trả lời {shortAnsweredCount}/{exam.shortAnswerQuestions.length}
+                </span>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {exam.shortAnswerQuestions.map((question, questionIndex) => {
+                  const key = String(question.id);
+                  const value = shortAnswers[key] || '';
+                  return (
+                    <div
+                      key={key}
+                      id={`short-${questionIndex}`}
+                      className={cn(
+                        'rounded-2xl border p-4 transition',
+                        value.trim()
+                          ? 'border-sky-200 bg-sky-50/40'
+                          : 'border-slate-200 bg-slate-50/60',
+                      )}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="flex size-7 items-center justify-center rounded-lg bg-white text-[11px] font-black text-sky-700 shadow-sm ring-1 ring-slate-200">
+                            {questionIndex + 1}
+                          </span>
+                          <h3 className="text-sm font-black text-slate-900">
+                            {question.questionLabel}
+                          </h3>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200">
+                            {formatNumber(question.points)} điểm
+                          </span>
+                        </div>
+                        <span
+                          className={cn(
+                            'text-[10px] font-black',
+                            value.trim() ? 'text-emerald-600' : 'text-rose-500',
+                          )}
+                        >
+                          {value.trim() ? 'Đã trả lời' : 'Chưa trả lời'}
+                        </span>
+                      </div>
+
+                      {question.questionImage ? (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewImage(question.questionImage || '')}
+                          className="mt-3 block w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-1"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={question.questionImage}
+                            alt={question.questionLabel}
+                            className="max-h-72 w-full rounded-lg object-contain"
+                          />
+                        </button>
+                      ) : null}
+
+                      {question.content ? (
+                        <p className="mt-3 whitespace-pre-line text-xs font-medium leading-relaxed text-slate-700">
+                          {question.content}
+                        </p>
+                      ) : null}
+
+                      <input
+                        type="text"
+                        value={value}
+                        onChange={(event) =>
+                          setShortAnswers((current) => ({
+                            ...current,
+                            [key]: event.target.value,
+                          }))
+                        }
+                        placeholder="Nhập câu trả lời ngắn..."
+                        autoComplete="off"
+                        className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
           {!practiceMode && exam.essayQuestions.length > 0 ? (
             <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
                 <div className="flex items-center gap-2.5">
-                  <span className="flex size-8 items-center justify-center rounded-xl bg-teal-600 text-xs font-black text-white">2</span>
+                  <span className="flex size-8 items-center justify-center rounded-xl bg-teal-600 text-xs font-black text-white">{essaySectionNumber}</span>
                   <div>
                     <h2 className="text-sm font-black text-slate-900">Phần tự luận</h2>
                     <p className="text-[11px] font-medium text-slate-400">Chụp ảnh bài làm và tải lên cho từng câu</p>
@@ -576,10 +722,14 @@ export function ExamRoom({
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
               <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500" style={{ width: `${percent}%` }} />
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-3 grid grid-cols-3 gap-2">
               <div className="rounded-xl bg-slate-50 p-2.5 text-center">
                 <p className="text-base font-black text-slate-800">{mcqAnsweredCount}/{exam.mcqCount}</p>
                 <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Trắc nghiệm</p>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-2.5 text-center">
+                <p className="text-base font-black text-slate-800">{shortAnsweredCount}/{exam.shortAnswerQuestions.length}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">TL ngắn</p>
               </div>
               <div className="rounded-xl bg-slate-50 p-2.5 text-center">
                 <p className="text-base font-black text-slate-800">{essayAnsweredCount}/{exam.essayQuestions.length}</p>
@@ -611,6 +761,39 @@ export function ExamRoom({
                 );
               })}
             </div>
+
+            {exam.shortAnswerQuestions.length > 0 ? (
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Câu trả lời ngắn
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {exam.shortAnswerQuestions.map((question, index) => {
+                    const done = (shortAnswers[String(question.id)] || '').trim().length > 0;
+                    return (
+                      <button
+                        key={String(question.id)}
+                        type="button"
+                        onClick={() =>
+                          document
+                            .getElementById(`short-${index}`)
+                            ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        }
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-black transition',
+                          done
+                            ? 'bg-sky-600 text-white'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200',
+                        )}
+                      >
+                        {done ? <Check className="size-3" /> : null}
+                        {question.questionLabel}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
 
             {!practiceMode && exam.essayQuestions.length > 0 ? (
               <div className="mt-4 border-t border-slate-100 pt-3">
@@ -689,19 +872,34 @@ export function ExamRoom({
             <p className="text-sm text-slate-500 mb-6">{exam.title}</p>
             <div className="space-y-3 text-left mb-8">
               <div className="flex justify-between border-b border-slate-100 pb-2">
-                <span className="text-slate-500">Đúng</span>
-                <span className="font-black text-emerald-600">{mcqAnsweredCount}/{exam.mcqCount}</span>
+                <span className="text-slate-500">Đúng trắc nghiệm</span>
+                <span className="font-black text-emerald-600">
+                  {practiceCorrect.mcq}/{exam.mcqCount}
+                </span>
               </div>
+              {exam.shortAnswerQuestions.length > 0 ? (
+                <div className="flex justify-between border-b border-slate-100 pb-2">
+                  <span className="text-slate-500">Đúng trả lời ngắn</span>
+                  <span className="font-black text-sky-600">
+                    {practiceCorrect.short}/{exam.shortAnswerQuestions.length}
+                  </span>
+                </div>
+              ) : null}
               <div className="flex justify-between border-b border-slate-100 pb-2">
                 <span className="text-slate-500">Điểm số</span>
                 <span className="font-black text-slate-900">
-                  {practiceScore} / {exam.totalPoints} điểm
+                  {formatNumber(practiceScore)} / {formatNumber(exam.totalPoints)} điểm
                 </span>
               </div>
               <div className="flex justify-between pt-2">
                 <span className="text-slate-500">Tỉ lệ chính xác</span>
                 <span className="font-black text-slate-900">
-                  {Math.round(((mcqAnsweredCount || 0) / Math.max(exam.mcqCount, 1)) * 100)}%
+                  {Math.round(
+                    ((practiceCorrect.mcq + practiceCorrect.short) /
+                      Math.max(exam.mcqCount + exam.shortAnswerQuestions.length, 1)) *
+                      100,
+                  )}
+                  %
                 </span>
               </div>
             </div>

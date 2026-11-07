@@ -15,6 +15,18 @@ export type EssayQuestion = {
   rubric?: string;
 };
 
+/** Câu trả lời ngắn: học sinh gõ đáp án, hệ thống tự chấm theo `answer`. */
+export type ShortAnswerQuestion = {
+  id: string | number;
+  questionLabel: string;
+  points: number;
+  questionImage?: string;
+  content: string;
+  /** Đáp án đúng. Nhiều đáp án hợp lệ cách nhau bởi `|`, `;` hoặc xuống dòng. */
+  answer: string;
+  rubric?: string;
+};
+
 export type ExamType = 'official' | 'practice';
 
 export type Exam = {
@@ -31,6 +43,7 @@ export type Exam = {
   mcqCount: number;
   mcqPointPerQ: number;
   mcqAnswers: number[];
+  shortAnswerQuestions: ShortAnswerQuestion[];
   essayQuestions: EssayQuestion[];
   createdAt?: string;
 };
@@ -46,6 +59,19 @@ export type EssayDetail = {
   graded: boolean;
 };
 
+export type ShortAnswerDetail = {
+  questionId: string | number;
+  questionLabel: string;
+  questionContent: string;
+  questionImage?: string;
+  maxPoints: number;
+  correctAnswer: string;
+  studentAnswer: string;
+  correct: boolean;
+  score: number;
+  comment: string;
+};
+
 export type Submission = {
   id: string;
   examId: string;
@@ -59,6 +85,7 @@ export type Submission = {
   studentMcqAnswers: Record<number, number>;
   correctMcqAnswers: number[];
   mcqImages: string[];
+  shortAnswerDetails: ShortAnswerDetail[];
   essayDetails: EssayDetail[];
   status: string;
   submittedAt: string;

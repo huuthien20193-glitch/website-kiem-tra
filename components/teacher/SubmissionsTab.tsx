@@ -222,6 +222,11 @@ export function SubmissionsTab({
               <tbody className="divide-y divide-slate-100 text-sm">
                 {filtered.map((submission) => {
                   const essayScore = Math.max(0, Number((submission.score - submission.autoScore).toFixed(1)))
+                  const shortScore = (submission.shortAnswerDetails || []).reduce(
+                    (sum, detail) => sum + (detail.score || 0),
+                    0,
+                  )
+                  const mcqScore = Math.max(0, Number((submission.autoScore - shortScore).toFixed(1)))
                   return (
                     <tr key={submission.id} className="transition hover:bg-slate-50/70">
                       <td className="px-5 py-4">
@@ -241,7 +246,8 @@ export function SubmissionsTab({
                       <td className="px-5 py-4">
                         <p className="text-base font-black text-emerald-600">{formatNumber(submission.score)}đ</p>
                         <p className="text-[10px] font-medium text-slate-400">
-                          TN {formatNumber(submission.autoScore)} · TL {formatNumber(essayScore)}
+                          TN {formatNumber(mcqScore)} · TLN {formatNumber(shortScore)} · TL{' '}
+                          {formatNumber(essayScore)}
                         </p>
                       </td>
                       <td className="px-5 py-4">

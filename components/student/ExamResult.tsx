@@ -23,6 +23,9 @@ type ExamResultProps = {
 export function ExamResult({ submission, onBack }: ExamResultProps) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const pending = isPending(submission.status);
+  const shortAnswerDetails = submission.shortAnswerDetails || [];
+  const shortAnswerScore = shortAnswerDetails.reduce((sum, detail) => sum + detail.score, 0);
+  const mcqScore = Math.max(0, Number((submission.autoScore - shortAnswerScore).toFixed(1)));
   const essayScore = Math.max(0, Number((submission.score - submission.autoScore).toFixed(1)));
   const correctPercent = progressPercent(submission.mcqCorrectCount, submission.mcqCount);
 
@@ -79,11 +82,12 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
             {[
-              { label: 'Trắc nghiệm', value: `${formatNumber(submission.autoScore)}đ` },
+              { label: 'Trắc nghiệm', value: `${formatNumber(mcqScore)}đ` },
+              { label: 'TL ngắn', value: `${formatNumber(shortAnswerScore)}đ` },
               { label: 'Tự luận', value: `${formatNumber(essayScore)}đ` },
-              { label: 'Câu đúng', value: `${submission.mcqCorrectCount}/${submission.mcqCount}` },
+              { label: 'Câu đúng TN', value: `${submission.mcqCorrectCount}/${submission.mcqCount}` },
               { label: 'Trạng thái', value: pending ? 'Chờ chấm' : 'Hoàn tất' },
             ].map((item) => (
               <div key={item.label} className="rounded-2xl bg-white/10 px-3 py-2.5 ring-1 ring-white/10">
@@ -161,6 +165,97 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
             <p className="mt-4 text-xs font-medium text-slate-400">Bài thi không có phần trắc nghiệm.</p>
           )}
         </section>
+
+        {shortAnswerDetails.length > 0 ? (
+          <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2">
+                <span className="flex size-8 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
+                  <Award className="size-4" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Phần trả lời ngắn</h2>
+                  <p className="text-[11px] font-medium text-slate-400">
+                    Hệ thống tự động chấm theo đáp án của giáo viên
+                  </p>
+                </div>
+              </div>
+              <span className="rounded-full bg-sky-50 px-3 py-1 text-[11px] font-black text-sky-700">
+                {formatNumber(shortAnswerScore)}đ
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {shortAnswerDetails.map((detail, index) => {
+                const correct = detail.correct;
+                return (
+                  <div
+                    key={`${detail.questionId}-${index}`}
+                    className={cn(
+                      'rounded-2xl border p-3',
+                      correct
+                        ? 'border-emerald-200 bg-emerald-50/50'
+                        : 'border-rose-200 bg-rose-50/50',
+                    )}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {correct ? (
+                          <CheckCircle2 className="size-4 text-emerald-600" />
+                        ) : (
+                          <CircleX className="size-4 text-rose-500" />
+                        )}
+                        <span className="text-xs font-black text-slate-800">
+                          {detail.questionLabel}
+                        </span>
+                      </div>
+                      <span
+                        className={cn(
+                          'text-[11px] font-black',
+                          correct ? 'text-emerald-700' : 'text-rose-600',
+                        )}
+                      >
+                        {formatNumber(detail.score)}/{formatNumber(detail.maxPoints)}đ
+                      </span>
+                    </div>
+
+                    {detail.questionContent ? (
+                      <p className="mt-2 text-[11px] font-medium leading-relaxed text-slate-600">
+                        {detail.questionContent}
+                      </p>
+                    ) : null}
+
+                    <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                      <div className="rounded-xl bg-white/70 px-2.5 py-1.5 ring-1 ring-slate-100">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          Bạn trả lời
+                        </p>
+                        <p
+                          className={cn(
+                            'mt-0.5 text-xs font-bold',
+                            correct ? 'text-emerald-700' : 'text-rose-600',
+                          )}
+                        >
+                          {detail.studentAnswer || 'Bỏ trống'}
+                        </p>
+                      </div>
+                      {!correct ? (
+                        <div className="rounded-xl bg-white/70 px-2.5 py-1.5 ring-1 ring-slate-100">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                            Đáp án đúng
+                          </p>
+                          <p className="mt-0.5 text-xs font-bold text-emerald-700">
+                            {detail.correctAnswer}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
         {submission.essayDetails.length > 0 ? (
           <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">

@@ -86,9 +86,13 @@ export default function TeacherDashboard() {
 
   // Tải dữ liệu khi mở trang
   useEffect(() => {
-    fetchExams()
-    fetchSubmissions()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Trì hoãn tải dữ liệu ra sau khi mount để không setState đồng bộ trong effect.
+    const timer = setTimeout(() => {
+      void fetchExams()
+      void fetchSubmissions()
+    }, 0)
+    return () => clearTimeout(timer)
+     
   }, [])
 
   // Tải lại dữ liệu khi quay lại tab trình duyệt
@@ -99,7 +103,7 @@ export default function TeacherDashboard() {
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   useEffect(() => {

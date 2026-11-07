@@ -74,3 +74,31 @@ export function progressPercent(current: number, total: number) {
   if (!total || total <= 0) return 0;
   return Math.min(100, Math.max(0, Math.round((current / total) * 100)));
 }
+
+function canonicalAnswer(value: string) {
+  const normalized = (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  // Cho phép học sinh gõ 0,5 hoặc 0.5 cho cùng một đáp án số.
+  const numeric = normalized.replace(',', '.');
+  if (/^-?\d+(\.\d+)?$/.test(numeric)) return String(Number(numeric));
+  return normalized;
+}
+
+/** Tách danh sách đáp án đúng: "4 | bốn | 2^2". */
+export function correctAnswerList(answer: string) {
+  return (answer || '')
+    .split(/[|;\n]/)
+    .map(canonicalAnswer)
+    .filter(Boolean);
+}
+
+/** So khớp câu trả lời ngắn, không phân biệt hoa thường và khoảng trắng thừa. */
+export function answerMatches(studentAnswer: string, correctAnswer: string) {
+  const student = canonicalAnswer(studentAnswer);
+  if (!student) return false;
+  return correctAnswerList(correctAnswer).includes(student);
+}
+
+/** Tổng điểm các câu trả lời ngắn đã được chấm tự động. */
+export function shortAnswerScore(details: Array<{ score: number }>) {
+  return round1(details.reduce((sum, detail) => sum + (detail.score || 0), 0));
+}

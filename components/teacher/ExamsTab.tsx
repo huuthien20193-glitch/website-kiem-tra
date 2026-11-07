@@ -97,53 +97,119 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
     doc.setTextColor(0, 0, 0);
     doc.text(`Tên đề: ${exam.title}`, margin, y);
 
+    const roman = ['I', 'II', 'III', 'IV'];
+    let sectionIndex = 0;
+
     // Trắc nghiệm
-    y += 10;
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('I. PHẦN TRẮC NGHIỆM', margin, y);
+    if (exam.mcqCount > 0) {
+      y += 10;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text(`${roman[sectionIndex]}. PHẦN TRẮC NGHIỆM`, margin, y);
+      sectionIndex += 1;
 
-    y += 6;
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(
-      `Số câu: ${exam.mcqCount} · Điểm/câu: ${exam.mcqPointPerQ}`,
-      margin,
-      y,
-    );
-
-    y += 6;
-    if (exam.mcqImages?.length > 0) {
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'italic');
-      doc.setTextColor(120, 120, 120);
-      doc.text('[Ảnh đề trắc nghiệm được đính kèm riêng trong hệ thống]', margin, y);
       y += 6;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Số câu: ${exam.mcqCount} · Điểm/câu: ${exam.mcqPointPerQ}`, margin, y);
+
+      y += 6;
+      if (exam.mcqImages?.length > 0) {
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(120, 120, 120);
+        doc.text('[Ảnh đề trắc nghiệm được đính kèm riêng trong hệ thống]', margin, y);
+        y += 6;
+      }
+
+      if (exam.mcqAnswers?.length > 0) {
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0, 0, 0);
+        doc.text('Đáp án trắc nghiệm:', margin, y);
+        y += 5;
+
+        const rows = exam.mcqAnswers.map((ans, i) => {
+          const label = ['A', 'B', 'C', 'D'][ans] ?? '?';
+          return [`Câu ${i + 1}`, label];
+        });
+
+        autoTable.default(doc, {
+          startY: y,
+          head: [['Câu', 'Đáp án']],
+          body: rows,
+          margin: { left: margin, right: margin },
+          theme: 'grid',
+          headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontSize: 9 },
+          bodyStyles: { fontSize: 9 },
+          columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 20 } },
+        });
+
+        y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+      }
     }
 
-    if (exam.mcqAnswers?.length > 0) {
-      doc.setFontSize(10);
+    // Trả lời ngắn
+    if ((exam.shortAnswerQuestions?.length ?? 0) > 0) {
+      y += 4;
+      doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
-      doc.text('Đáp án trắc nghiệm:', margin, y);
-      y += 5;
+      doc.setTextColor(0, 0, 0);
+      doc.text(`${roman[sectionIndex]}. PHẦN TRẢ LỜI NGẮN`, margin, y);
+      sectionIndex += 1;
 
-      const rows = exam.mcqAnswers.map((ans, i) => {
-        const label = ['A', 'B', 'C', 'D'][ans] ?? '?';
-        return [`Câu ${i + 1}`, label];
+      y += 6;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Số câu: ${exam.shortAnswerQuestions.length}`, margin, y);
+      y += 6;
+
+      exam.shortAnswerQuestions.forEach((q, qi) => {
+        if (y > 270) {
+          doc.addPage();
+          y = 20;
+        }
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0, 0, 0);
+        doc.text(`${q.questionLabel || `Câu ${qi + 1}`} (${q.points} điểm)`, margin, y);
+        y += 5;
+
+        if (q.content) {
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          const lines = doc.splitTextToSize(q.content, contentWidth);
+          doc.text(lines, margin, y);
+          y += lines.length * 4.5 + 1;
+        }
+
+        if (q.questionImage) {
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'italic');
+          doc.setTextColor(120, 120, 120);
+          doc.text('[Có ảnh đề đính kèm trong hệ thống]', margin, y);
+          y += 5;
+        }
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(16, 185, 129);
+        doc.text(`Đáp án: ${q.answer}`, margin, y);
+        doc.setTextColor(0, 0, 0);
+        y += 5;
+
+        if (q.rubric) {
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'italic');
+          doc.setTextColor(120, 120, 120);
+          const rubricLines = doc.splitTextToSize(`Rubric: ${q.rubric}`, contentWidth);
+          doc.text(rubricLines, margin, y);
+          y += rubricLines.length * 4;
+        }
+        y += 4;
       });
-
-      autoTable.default(doc, {
-        startY: y,
-        head: [['Câu', 'Đáp án']],
-        body: rows,
-        margin: { left: margin, right: margin },
-        theme: 'grid',
-        headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontSize: 9 },
-        bodyStyles: { fontSize: 9 },
-        columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 20 } },
-      });
-
-      y = (doc as any).lastAutoTable.finalY + 8;
     }
 
     // Tự luận
@@ -151,7 +217,8 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
       y += 4;
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
-      doc.text('II. PHẦN TỰ LUẬN', margin, y);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`${roman[sectionIndex]}. PHẦN TỰ LUẬN`, margin, y);
 
       y += 6;
       doc.setFontSize(10);
@@ -160,36 +227,37 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
 
       y += 6;
       (exam.essayQuestions ?? []).forEach((q, qi) => {
+        if (y > 270) {
+          doc.addPage();
+          y = 20;
+        }
+
         doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
-        doc.text(
-          `${q.questionLabel || `Câu ${qi + 1}`}. ${q.questionLabel || ''}`,
-          margin,
-          y,
-        );
+        doc.setTextColor(0, 0, 0);
+        doc.text(`${q.questionLabel || `Câu ${qi + 1}`} (${q.points} điểm)`, margin, y);
         y += 5;
 
-        (q.subParts ?? []).forEach((part: any) => {
+        (q.subParts ?? []).forEach((part) => {
           doc.setFontSize(9);
           doc.setFont('helvetica', 'normal');
-          doc.text(
+          const lines = doc.splitTextToSize(
             `   ${part.label}. ${part.content || ''} (${part.points} điểm)`,
-            margin,
-            y,
+            contentWidth,
           );
-          y += 5;
+          doc.text(lines, margin, y);
+          y += lines.length * 4.5 + 0.5;
         });
 
         doc.setFontSize(8);
         doc.setFont('helvetica', 'italic');
         doc.setTextColor(120, 120, 120);
-        doc.text(`Rubric: ${q.rubric || 'Chưa có hướng dẫn chấm điểm'}`, margin, y);
-        y += 8;
-
-        if (y > 280) {
-          doc.addPage();
-          y = 20;
-        }
+        const rubricLines = doc.splitTextToSize(
+          `Rubric: ${q.rubric || 'Chưa có hướng dẫn chấm điểm'}`,
+          contentWidth,
+        );
+        doc.text(rubricLines, margin, y);
+        y += rubricLines.length * 4 + 2;
       });
     }
 
@@ -404,7 +472,7 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
                 {exam.title}
               </h3>
 
-              <div className="mt-4 grid grid-cols-3 divide-x divide-slate-100 rounded-2xl bg-slate-50 py-3 text-center">
+              <div className="mt-4 grid grid-cols-4 divide-x divide-slate-100 rounded-2xl bg-slate-50 py-3 text-center">
                 <div>
                   <p className="flex items-center justify-center gap-1 text-sm font-black text-slate-800">
                     <Clock3 className="size-3.5 text-emerald-500" />
@@ -418,6 +486,13 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
                     {exam.mcqCount}
                   </p>
                   <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Trắc nghiệm</p>
+                </div>
+                <div>
+                  <p className="flex items-center justify-center gap-1 text-sm font-black text-slate-800">
+                    <Layers className="size-3.5 text-cyan-500" />
+                    {exam.shortAnswerQuestions.length}
+                  </p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">TL ngắn</p>
                 </div>
                 <div>
                   <p className="flex items-center justify-center gap-1 text-sm font-black text-slate-800">

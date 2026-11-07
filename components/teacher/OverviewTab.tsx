@@ -37,7 +37,7 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
     {
       label: 'Đề kiểm tra',
       value: String(exams.length),
-      hint: `${exams.reduce((sum, exam) => sum + exam.mcqCount, 0)} câu trắc nghiệm`,
+      hint: `${exams.reduce((sum, exam) => sum + exam.mcqCount, 0)} câu TN · ${exams.reduce((sum, exam) => sum + exam.shortAnswerQuestions.length, 0)} câu TL ngắn`,
       icon: FileText,
       tone: 'from-emerald-500 to-teal-600',
       onClick: () => onNavigate('exams'),

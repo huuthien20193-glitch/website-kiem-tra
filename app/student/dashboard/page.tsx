@@ -94,13 +94,19 @@ export default function StudentDashboard() {
   };
 
   useEffect(() => {
-    void refreshExams();
+    // Trì hoãn tải dữ liệu ra sau khi mount để không setState đồng bộ trong effect.
+    const timer = setTimeout(() => {
+      void refreshExams();
+    }, 0);
     const handleFocus = () => {
       void refreshExams();
     };
     window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('focus', handleFocus);
+    };
+     
   }, []);
 
   useEffect(() => {
@@ -471,6 +477,10 @@ export default function StudentDashboard() {
                     <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2">
                       <FileText className="size-3.5 text-sky-500" />
                       <span className="text-[11px] font-bold text-slate-600">{exam.mcqCount} câu TN</span>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2">
+                      <FileText className="size-3.5 text-cyan-500" />
+                      <span className="text-[11px] font-bold text-slate-600">{exam.shortAnswerQuestions.length} câu TLN</span>
                     </div>
                     <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2">
                       <BookOpen className="size-3.5 text-violet-500" />

@@ -1,6 +1,15 @@
-import type { EssayDetail, EssayQuestion, Exam, Grade, Submission, SubPart } from './types';
+import type {
+  EssayDetail,
+  EssayQuestion,
+  Exam,
+  Grade,
+  ShortAnswerDetail,
+  ShortAnswerQuestion,
+  Submission,
+  SubPart,
+} from './types';
 import { GRADES } from './types';
-import { round1 } from './utils';
+import { answerMatches, round1 } from './utils';
 
 export const STORAGE_KEYS = {
   exams: 'tht_teacher_exams',
@@ -14,6 +23,7 @@ export const STORAGE_KEYS = {
 
 export type ExamDraft = {
   mcqAnswers: Record<number, number>;
+  shortAnswers?: Record<string, string>;
   essayImages: Record<string, string[]>;
   deadline?: number;
   savedAt?: number;
@@ -73,6 +83,24 @@ export function normalizeEssayQuestion(raw: Partial<EssayQuestion>, index: numbe
   };
 }
 
+export function normalizeShortAnswerQuestion(
+  raw: Partial<ShortAnswerQuestion>,
+  index: number,
+): ShortAnswerQuestion {
+  return {
+    id: raw?.id ?? `short-${index}-${Date.now()}`,
+    questionLabel:
+      typeof raw?.questionLabel === 'string' && raw.questionLabel
+        ? raw.questionLabel
+        : `Câu ${index + 1}`,
+    points: Math.max(0, asNumber(raw?.points, 0)),
+    questionImage: typeof raw?.questionImage === 'string' ? raw.questionImage : '',
+    content: typeof raw?.content === 'string' ? raw.content : '',
+    answer: typeof raw?.answer === 'string' ? raw.answer : '',
+    rubric: typeof raw?.rubric === 'string' ? raw.rubric : '',
+  };
+}
+
 export function normalizeExam(raw: Partial<Exam>): Exam {
   const mcqCount = clamp(Math.round(asNumber(raw?.mcqCount, 0)), 0, 100);
   const mcqAnswers = Array.from({ length: mcqCount }, (_, index) => {
@@ -95,6 +123,11 @@ export function normalizeExam(raw: Partial<Exam>): Exam {
     mcqCount,
     mcqPointPerQ: Math.max(0, asNumber(raw?.mcqPointPerQ, 0.5)),
     mcqAnswers,
+    shortAnswerQuestions: Array.isArray(raw?.shortAnswerQuestions)
+      ? raw.shortAnswerQuestions.map((question, index) =>
+          normalizeShortAnswerQuestion(question, index),
+        )
+      : [],
     essayQuestions: Array.isArray(raw?.essayQuestions)
       ? raw.essayQuestions.map((question, index) => normalizeEssayQuestion(question, index))
       : [],
@@ -135,6 +168,26 @@ export function normalizeSubmission(raw: Partial<Submission>): Submission {
       }))
     : [];
 
+  const shortAnswerDetails: ShortAnswerDetail[] = Array.isArray(raw?.shortAnswerDetails)
+    ? raw.shortAnswerDetails.map((detail, index) => ({
+        questionId: detail?.questionId ?? index,
+        questionLabel:
+          typeof detail?.questionLabel === 'string'
+            ? detail.questionLabel
+            : `Câu ${index + 1}`,
+        questionContent:
+          typeof detail?.questionContent === 'string' ? detail.questionContent : '',
+        questionImage:
+          typeof detail?.questionImage === 'string' ? detail.questionImage : '',
+        maxPoints: Math.max(0, asNumber(detail?.maxPoints, 0)),
+        correctAnswer: typeof detail?.correctAnswer === 'string' ? detail.correctAnswer : '',
+        studentAnswer: typeof detail?.studentAnswer === 'string' ? detail.studentAnswer : '',
+        correct: Boolean(detail?.correct),
+        score: Math.max(0, asNumber(detail?.score, 0)),
+        comment: typeof detail?.comment === 'string' ? detail.comment : '',
+      }))
+    : [];
+
   const correctMcqAnswers = Array.isArray(raw?.correctMcqAnswers)
     ? raw.correctMcqAnswers.map((value) => clamp(Math.round(asNumber(value, 0)), 0, 3))
     : [];
@@ -152,6 +205,7 @@ export function normalizeSubmission(raw: Partial<Submission>): Submission {
     studentMcqAnswers,
     correctMcqAnswers,
     mcqImages: Array.isArray(raw?.mcqImages) ? raw.mcqImages.filter((image): image is string => typeof image === 'string') : [],
+    shortAnswerDetails,
     essayDetails,
     status:
       typeof raw?.status === 'string' && raw.status
@@ -183,6 +237,7 @@ export function seedExam(): Exam {
     mcqCount: 6,
     mcqPointPerQ: 0.5,
     mcqAnswers: [0, 1, 2, 3, 0, 2],
+    shortAnswerQuestions: [],
     essayQuestions: [
       {
         id: 'seed-essay-1',
@@ -285,6 +340,7 @@ export function buildSubmission(
   studentName: string,
   studentClass: string,
   mcqAnswers: Record<number, number>,
+  shortAnswers: Record<string, string>,
   essayImages: Record<string, string[]>,
 ): Submission {
   let mcqCorrectCount = 0;
@@ -292,7 +348,28 @@ export function buildSubmission(
     if (mcqAnswers[index] === exam.mcqAnswers[index]) mcqCorrectCount += 1;
   }
 
-  const autoScore = round1(mcqCorrectCount * (exam.mcqPointPerQ || 0.5));
+  const mcqScore = round1(mcqCorrectCount * (exam.mcqPointPerQ || 0));
+
+  const shortAnswerDetails: ShortAnswerDetail[] = exam.shortAnswerQuestions.map((question) => {
+    const studentAnswer = shortAnswers[String(question.id)] || '';
+    const correct = answerMatches(studentAnswer, question.answer);
+    return {
+      questionId: question.id,
+      questionLabel: question.questionLabel,
+      questionContent: question.content,
+      questionImage: question.questionImage || '',
+      maxPoints: question.points,
+      correctAnswer: question.answer,
+      studentAnswer,
+      correct,
+      score: correct ? question.points : 0,
+      comment: '',
+    };
+  });
+  const shortScore = round1(
+    shortAnswerDetails.reduce((sum, detail) => sum + detail.score, 0),
+  );
+  const autoScore = round1(mcqScore + shortScore);
 
   const essayDetails: EssayDetail[] = exam.essayQuestions.map((question) => ({
     questionId: question.id,
@@ -322,16 +399,23 @@ export function buildSubmission(
     studentMcqAnswers: mcqAnswers,
     correctMcqAnswers: exam.mcqAnswers,
     mcqImages: exam.mcqImages,
+    shortAnswerDetails,
     essayDetails,
     status: pending ? 'Chờ giáo viên chấm tự luận' : 'Đã chấm điểm hoàn tất',
     submittedAt: new Date().toLocaleString('vi-VN'),
   };
 }
 
-export function totalConfiguredPoints(exam: Pick<Exam, 'mcqCount' | 'mcqPointPerQ' | 'essayQuestions'>) {
+export function totalConfiguredPoints(
+  exam: Pick<Exam, 'mcqCount' | 'mcqPointPerQ' | 'shortAnswerQuestions' | 'essayQuestions'>,
+) {
   const mcqPoints = (exam.mcqCount || 0) * (exam.mcqPointPerQ || 0);
+  const shortAnswerPoints = (exam.shortAnswerQuestions || []).reduce(
+    (sum, question) => sum + (question.points || 0),
+    0,
+  );
   const essayPoints = (exam.essayQuestions || []).reduce((sum, question) => sum + (question.points || 0), 0);
-  return round1(mcqPoints + essayPoints);
+  return round1(mcqPoints + shortAnswerPoints + essayPoints);
 }
 
 /* ------------------------------ Session / profile ------------------------------ */

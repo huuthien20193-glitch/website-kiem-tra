@@ -13,6 +13,7 @@ export function submissionsToCsv(submissions: Submission[]) {
     'Lớp',
     'Đề thi',
     'Điểm trắc nghiệm',
+    'Điểm trả lời ngắn',
     'Điểm tự luận',
     'Tổng điểm',
     'Trạng thái',
@@ -21,12 +22,20 @@ export function submissionsToCsv(submissions: Submission[]) {
 
   const rows = submissions.map((submission, index) => {
     const essayScore = round1(Math.max(0, (submission.score || 0) - (submission.autoScore || 0)));
+    const shortScore = round1(
+      (submission.shortAnswerDetails || []).reduce(
+        (sum, detail) => sum + (detail.score || 0),
+        0,
+      ),
+    );
+    const mcqScore = round1(Math.max(0, (submission.autoScore || 0) - shortScore));
     return [
       index + 1,
       submission.studentName,
       submission.studentClass,
       submission.examTitle,
-      submission.autoScore,
+      mcqScore,
+      shortScore,
       essayScore,
       submission.score,
       isPending(submission.status) ? 'Chờ chấm tự luận' : submission.status,

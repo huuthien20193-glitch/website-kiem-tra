@@ -54,6 +54,12 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
     [scores, submission.essayDetails],
   );
 
+  const shortAnswerDetails = submission.shortAnswerDetails || [];
+  const shortAnswerTotal = round1(
+    shortAnswerDetails.reduce((sum, detail) => sum + (detail.score || 0), 0),
+  );
+  const mcqScore = Math.max(0, round1((submission.autoScore || 0) - shortAnswerTotal));
+  const hasShortAnswers = shortAnswerDetails.length > 0;
   const finalTotal = round1((submission.autoScore || 0) + essayTotal);
 
   const updateScore = (questionId: string | number, rawValue: string, maxPoints: number) => {
@@ -123,7 +129,7 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
                 Phần 1 · Trắc nghiệm
               </h3>
               <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700">
-                {submission.mcqCorrectCount}/{submission.mcqCount} câu đúng · {formatNumber(submission.autoScore)}đ
+                {submission.mcqCorrectCount}/{submission.mcqCount} câu đúng · {formatNumber(mcqScore)}đ
               </span>
             </div>
 
@@ -165,16 +171,91 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
             )}
           </div>
 
+          {hasShortAnswers ? (
+            <div className="rounded-2xl border border-sky-200 bg-white p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-xs font-black uppercase tracking-wide text-sky-800">
+                  Phần 2 · Trả lời ngắn
+                </h3>
+                <span className="rounded-full bg-sky-50 px-3 py-1 text-[11px] font-black text-sky-700">
+                  {shortAnswerDetails.filter((detail) => detail.correct).length}/
+                  {shortAnswerDetails.length} câu đúng · {formatNumber(shortAnswerTotal)}đ
+                </span>
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {shortAnswerDetails.map((detail, index) => (
+                  <div
+                    key={`${detail.questionId}-${index}`}
+                    className={cn(
+                      'rounded-xl border p-3',
+                      detail.correct
+                        ? 'border-emerald-200 bg-emerald-50/50'
+                        : 'border-rose-200 bg-rose-50/50',
+                    )}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {detail.correct ? (
+                          <CheckCircle2 className="size-4 text-emerald-600" />
+                        ) : (
+                          <CircleX className="size-4 text-rose-500" />
+                        )}
+                        <span className="text-xs font-black text-slate-800">
+                          {detail.questionLabel}
+                        </span>
+                      </div>
+                      <span
+                        className={cn(
+                          'text-[11px] font-black',
+                          detail.correct ? 'text-emerald-700' : 'text-rose-600',
+                        )}
+                      >
+                        {formatNumber(detail.score)}/{formatNumber(detail.maxPoints)}đ
+                      </span>
+                    </div>
+                    {detail.questionContent ? (
+                      <p className="mt-1.5 text-[11px] font-medium leading-relaxed text-slate-600">
+                        {detail.questionContent}
+                      </p>
+                    ) : null}
+                    <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
+                      <p className="rounded-lg bg-white/70 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-100">
+                        Học sinh:{' '}
+                        <span
+                          className={cn(
+                            'font-black',
+                            detail.correct ? 'text-emerald-700' : 'text-rose-600',
+                          )}
+                        >
+                          {detail.studentAnswer || 'Bỏ trống'}
+                        </span>
+                      </p>
+                      {!detail.correct ? (
+                        <p className="rounded-lg bg-white/70 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-100">
+                          Đáp án:{' '}
+                          <span className="font-black text-emerald-700">
+                            {detail.correctAnswer}
+                          </span>
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {submission.essayDetails.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
               <Award className="mx-auto size-8 text-slate-300" />
-              <p className="mt-2 text-sm font-bold text-slate-700">Bài thi chỉ có phần trắc nghiệm</p>
+              <p className="mt-2 text-sm font-bold text-slate-700">Bài thi không có phần tự luận</p>
               <p className="mt-1 text-xs text-slate-400">Nhấn &quot;Hoàn tất chấm bài&quot; để xác nhận kết quả.</p>
             </div>
           ) : (
             <div className="space-y-4">
               <h3 className="text-xs font-black uppercase tracking-wide text-slate-600">
-                Phần 2 · Tự luận ({submission.essayDetails.length} câu)
+                Phần {hasShortAnswers ? 3 : 2} · Tự luận ({submission.essayDetails.length} câu)
               </h3>
 
               {submission.essayDetails.map((detail, index) => (
@@ -263,11 +344,20 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
         </div>
 
         <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <div>
               <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Trắc nghiệm</p>
-              <p className="text-sm font-black text-slate-800">{formatNumber(submission.autoScore)}đ</p>
+              <p className="text-sm font-black text-slate-800">{formatNumber(mcqScore)}đ</p>
             </div>
+            {hasShortAnswers ? (
+              <>
+                <div className="h-8 w-px bg-slate-200" />
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">TL ngắn</p>
+                  <p className="text-sm font-black text-slate-800">{formatNumber(shortAnswerTotal)}đ</p>
+                </div>
+              </>
+            ) : null}
             <div className="h-8 w-px bg-slate-200" />
             <div>
               <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Tự luận</p>

@@ -159,6 +159,7 @@ export type SubmissionRow = {
   student_mcq_answers: Record<number, number> | number[]
   correct_mcq_answers: number[]
   mcq_images: string[] | null
+  short_answer_details?: unknown[] | null
   essay_details: unknown[] | null
   status: string
   submitted_at: string
@@ -179,6 +180,7 @@ export function mapSubmissionToRow(submission: Submission) {
     student_mcq_answers: submission.studentMcqAnswers,
     correct_mcq_answers: submission.correctMcqAnswers,
     mcq_images: submission.mcqImages,
+    short_answer_details: submission.shortAnswerDetails,
     essay_details: submission.essayDetails,
     status: submission.status,
     submitted_at: toIsoTimestamp(submission.submittedAt),
@@ -200,6 +202,7 @@ export function mapRowToSubmission(row: SubmissionRow): Submission {
     studentMcqAnswers: row.student_mcq_answers as Record<number, number>,
     correctMcqAnswers: row.correct_mcq_answers,
     mcqImages: row.mcq_images ?? [],
+    shortAnswerDetails: (row.short_answer_details ?? []) as Submission['shortAnswerDetails'],
     essayDetails: (row.essay_details ?? []) as Submission['essayDetails'],
     status: row.status,
     submittedAt: formatTimestamp(row.submitted_at),
@@ -250,7 +253,16 @@ export async function insertSubmissionToCloud(
     return { ok: false, message: 'Chưa cấu hình NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY.' }
   }
 
-  const { error } = await supabase.from('submissions').insert(mapSubmissionToRow(submission))
+  const row = mapSubmissionToRow(submission)
+  let { error } = await supabase.from('submissions').insert(row)
+
+  // Tương thích với bảng cũ chưa có cột short_answer_details.
+  if (error && /short_answer_details/i.test(`${error.code ?? ''} ${error.message ?? ''}`)) {
+    const { short_answer_details: _omit, ...fallback } = row
+    void _omit
+    const retry = await supabase.from('submissions').insert(fallback)
+    error = retry.error
+  }
 
   if (error) {
     console.error('Không thể nộp bài lên Supabase:', errorMessage(error))

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Check,
   CircleAlert,
@@ -12,7 +12,14 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import type { EssayQuestion, Exam, ExamType, Grade, SubPart } from '@/lib/types';
+import type {
+  EssayQuestion,
+  Exam,
+  ExamType,
+  Grade,
+  ShortAnswerQuestion,
+  SubPart,
+} from '@/lib/types';
 import { GRADES, OPTION_LABELS, SUBJECTS } from '@/lib/types';
 import { cn, formatNumber } from '@/lib/utils';
 import { imageFilesFromClipboard, optimizeImage } from '@/lib/image';
@@ -23,7 +30,8 @@ type CreateExamTabProps = {
   onCancel: () => void;
 };
 
-const newId = () => `essay-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const newId = (prefix = 'essay') =>
+  `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 // Cột exams.id là kiểu uuid trên Supabase nên mã đề phải là UUID hợp lệ.
 const newExamId = () => {
@@ -49,6 +57,16 @@ const createEmptyEssay = (index: number): EssayQuestion => ({
   rubric: '',
 });
 
+const createEmptyShortAnswer = (index: number): ShortAnswerQuestion => ({
+  id: newId('short'),
+  questionLabel: `Câu ${index}`,
+  points: 1,
+  questionImage: '',
+  content: '',
+  answer: '',
+  rubric: '',
+});
+
 function NumberBadge({ children }: { children: ReactNode }) {
   return (
     <span className="flex size-7 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-xs font-black text-white shadow-sm">
@@ -69,6 +87,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
   const [totalPoints, setTotalPoints] = useState(10);
   const [examType, setExamType] = useState<ExamType>('official');
 
+  const [hasMcq, setHasMcq] = useState(true);
   const [mcqImages, setMcqImages] = useState<string[]>([]);
   const [mcqCount, setMcqCount] = useState(10);
   const [mcqPointPerQ, setMcqPointPerQ] = useState(0.5);
@@ -77,14 +96,23 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [shortAnswerQuestions, setShortAnswerQuestions] = useState<ShortAnswerQuestion[]>([]);
   const [essayQuestions, setEssayQuestions] = useState<EssayQuestion[]>([createEmptyEssay(7)]);
 
-  const mcqPoints = useMemo(() => mcqCount * mcqPointPerQ, [mcqCount, mcqPointPerQ]);
+  const effectiveMcqCount = hasMcq ? mcqCount : 0;
+  const mcqPoints = useMemo(
+    () => effectiveMcqCount * mcqPointPerQ,
+    [effectiveMcqCount, mcqPointPerQ],
+  );
+  const shortAnswerPoints = useMemo(
+    () => shortAnswerQuestions.reduce((sum, question) => sum + question.points, 0),
+    [shortAnswerQuestions],
+  );
   const essayPoints = useMemo(
     () => essayQuestions.reduce((sum, question) => sum + question.points, 0),
     [essayQuestions],
   );
-  const configuredPoints = Number((mcqPoints + essayPoints).toFixed(2));
+  const configuredPoints = Number((mcqPoints + shortAnswerPoints + essayPoints).toFixed(2));
   const pointsMismatch = Math.abs(configuredPoints - totalPoints) > 0.01;
 
   const updateMcqCount = (value: number) => {
@@ -127,6 +155,70 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
     } finally {
       setUploading(false);
     }
+  };
+
+  const addShortAnswerImage = async (questionId: string | number, file: File) => {
+    setUploading(true);
+    try {
+      const image = await optimizeImage(file);
+      setShortAnswerQuestions((current) =>
+        current.map((question) =>
+          question.id === questionId ? { ...question, questionImage: image } : question,
+        ),
+      );
+      toast.success('Đã thêm ảnh câu hỏi');
+    } catch {
+      toast.error('Không thể đọc ảnh', 'Vui lòng chọn tệp ảnh hợp lệ.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Dán ảnh (Ctrl + V) ở bất kỳ đâu trong form đều thêm đúng chỗ:
+  // paste bên trong khối câu trả lời ngắn/tự luận -> ảnh của câu đó,
+  // ngược lại -> ảnh đề trắc nghiệm.
+  const pasteTargetRef = useRef({ hasMcq });
+  useEffect(() => {
+    pasteTargetRef.current = { hasMcq };
+  }, [hasMcq]);
+
+  useEffect(() => {
+    const handlePaste = (event: globalThis.ClipboardEvent) => {
+      const files = imageFilesFromClipboard(event);
+      if (files.length === 0) return;
+      const target = event.target instanceof Element ? event.target : null;
+      const block = target?.closest<HTMLElement>('[data-paste-question]');
+      if (block) {
+        const type = block.dataset.pasteQuestion;
+        const id = block.dataset.pasteId;
+        if (type === 'short' && id) {
+          event.preventDefault();
+          void addShortAnswerImage(id, files[0]);
+          return;
+        }
+        if (type === 'essay' && id) {
+          event.preventDefault();
+          void addEssayImage(id, files[0]);
+          return;
+        }
+      }
+      if (pasteTargetRef.current.hasMcq) {
+        event.preventDefault();
+        void addMcqFiles(files);
+      }
+    };
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const updateShortAnswer = (
+    id: string | number,
+    patch: Partial<ShortAnswerQuestion>,
+  ) => {
+    setShortAnswerQuestions((current) =>
+      current.map((question) => (question.id === id ? { ...question, ...patch } : question)),
+    );
   };
 
   const updateEssay = (id: string | number, patch: Partial<EssayQuestion>) => {
@@ -190,10 +282,12 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
     setGrade(9);
     setDurationMinutes(45);
     setTotalPoints(10);
+    setHasMcq(true);
     setMcqImages([]);
     setMcqCount(10);
     setMcqPointPerQ(0.5);
     setMcqAnswers(Array(10).fill(0));
+    setShortAnswerQuestions([]);
     setEssayQuestions([createEmptyEssay(7)]);
   };
 
@@ -212,6 +306,20 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
       return;
     }
 
+    if (effectiveMcqCount + shortAnswerQuestions.length + essayQuestions.length === 0) {
+      toast.error('Đề chưa có câu hỏi', 'Hãy thêm ít nhất một câu trắc nghiệm, trả lời ngắn hoặc tự luận.');
+      return;
+    }
+
+    const missingAnswer = shortAnswerQuestions.find((question) => !question.answer.trim());
+    if (missingAnswer) {
+      toast.error(
+        'Thiếu đáp án câu trả lời ngắn',
+        `Vui lòng nhập đáp án đúng cho ${missingAnswer.questionLabel.trim() || 'câu trả lời ngắn'}.`,
+      );
+      return;
+    }
+
     const exam: Exam = {
       id: newExamId(),
       title: title.trim(),
@@ -221,10 +329,18 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
       totalPoints: Number(totalPoints),
       status: 'Đã xuất bản',
       type: examType,
-      mcqImages,
-      mcqCount,
+      mcqImages: hasMcq ? mcqImages : [],
+      mcqCount: effectiveMcqCount,
       mcqPointPerQ: Number(mcqPointPerQ),
-      mcqAnswers: mcqAnswers.slice(0, mcqCount),
+      mcqAnswers: hasMcq ? mcqAnswers.slice(0, mcqCount) : [],
+      shortAnswerQuestions: shortAnswerQuestions.map((question) => ({
+        ...question,
+        questionLabel: question.questionLabel.trim() || 'Câu trả lời ngắn',
+        points: Number(question.points) || 0,
+        content: (question.content || '').trim(),
+        answer: (question.answer || '').trim(),
+        rubric: (question.rubric || '').trim(),
+      })),
       essayQuestions: essayQuestions.map((question) => ({
         ...question,
         questionLabel: question.questionLabel.trim() || 'Câu tự luận',
@@ -256,7 +372,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
         <div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Tạo đề kiểm tra mới</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Thiết kế đề trắc nghiệm dạng ảnh, cài đáp án chuẩn và cấu trúc tự luận theo từng ý.
+            Linh hoạt trắc nghiệm, trả lời ngắn và tự luận — có thể bỏ hẳn phần trắc nghiệm nếu muốn.
           </p>
         </div>
         <button
@@ -409,21 +525,55 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
               {pointsMismatch ? ` (lệch ${formatNumber(Math.abs(configuredPoints - totalPoints), 2)}đ so với thang điểm)` : ' — khớp với thang điểm'}
             </span>
             <span className="font-bold">
-              TN {formatNumber(mcqPoints, 2)}đ · TL {formatNumber(essayPoints, 2)}đ
+              TN {formatNumber(mcqPoints, 2)}đ · TLN {formatNumber(shortAnswerPoints, 2)}đ · TL{' '}
+              {formatNumber(essayPoints, 2)}đ
             </span>
           </div>
         </section>
 
         {/* STEP 2 */}
         <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
-          <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
+          <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-slate-100 pb-4">
             <NumberBadge>2</NumberBadge>
-            <div>
+            <div className="min-w-0 flex-1">
               <h2 className="text-sm font-black text-slate-900">Phần trắc nghiệm</h2>
-              <p className="text-[11px] font-medium text-slate-400">Tải ảnh đề và chọn đáp án đúng cho từng câu</p>
+              <p className="text-[11px] font-medium text-slate-400">
+                {hasMcq
+                  ? 'Tải ảnh đề và chọn đáp án đúng cho từng câu'
+                  : 'Đề này không có phần trắc nghiệm'}
+              </p>
             </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={hasMcq}
+              onClick={() => setHasMcq((current) => !current)}
+              className={cn(
+                'inline-flex items-center gap-3 rounded-2xl border-2 px-4 py-2.5 text-xs font-black uppercase tracking-wide transition',
+                hasMcq
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                  : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300',
+              )}
+            >
+              <span>{hasMcq ? 'Có trắc nghiệm' : 'Không trắc nghiệm'}</span>
+              <span
+                className={cn(
+                  'relative h-6 w-11 rounded-full transition',
+                  hasMcq ? 'bg-emerald-500' : 'bg-slate-300',
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute top-0.5 size-5 rounded-full bg-white shadow transition-all',
+                    hasMcq ? 'left-5.5' : 'left-0.5',
+                  )}
+                />
+              </span>
+            </button>
           </div>
 
+          {hasMcq ? (
+          <>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-bold text-slate-600">Số lượng câu trắc nghiệm</label>
@@ -569,12 +719,200 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
               ))}
             </div>
           </div>
+          </>
+          ) : (
+            <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
+              <CircleAlert className="mt-0.5 size-4 shrink-0" />
+              Đề sẽ được tạo không có câu trắc nghiệm. Bạn vẫn có thể thêm câu trả lời ngắn và tự luận bên dưới.
+            </div>
+          )}
         </section>
 
         {/* STEP 3 */}
         <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
           <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
             <NumberBadge>3</NumberBadge>
+            <div>
+              <h2 className="text-sm font-black text-slate-900">Phần trả lời ngắn</h2>
+              <p className="text-[11px] font-medium text-slate-400">
+                Học sinh gõ đáp án trực tiếp — hệ thống tự chấm theo đáp án đúng
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {shortAnswerQuestions.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 px-4 py-6 text-center">
+                <p className="text-xs font-bold text-slate-600">Chưa có câu trả lời ngắn</p>
+                <p className="mt-1 text-[11px] font-medium text-slate-400">
+                  Thêm câu hỏi để học sinh nhập đáp án trực tiếp.
+                </p>
+              </div>
+            ) : null}
+
+            {shortAnswerQuestions.map((question, questionIndex) => (
+              <div
+                key={question.id}
+                data-paste-question="short"
+                data-paste-id={String(question.id)}
+                className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5"
+              >
+                <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="flex size-8 items-center justify-center rounded-xl bg-white text-xs font-black text-sky-700 shadow-sm ring-1 ring-slate-200">
+                      {questionIndex + 1}
+                    </span>
+                    <input
+                      type="text"
+                      value={question.questionLabel}
+                      onChange={(event) =>
+                        updateShortAnswer(question.id, { questionLabel: event.target.value })
+                      }
+                      placeholder="Câu 1"
+                      className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-sky-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                    />
+                    <span className="text-[11px] font-bold text-slate-500">Điểm câu:</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.25}
+                      value={question.points}
+                      onChange={(event) =>
+                        updateShortAnswer(question.id, { points: Number(event.target.value) })
+                      }
+                      className="w-20 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-center text-xs font-black text-sky-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShortAnswerQuestions((current) =>
+                        current.filter((item) => item.id !== question.id),
+                      )
+                    }
+                    className="inline-flex items-center gap-1 self-start rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-rose-500 transition hover:bg-rose-100 sm:self-auto"
+                  >
+                    <Trash2 className="size-3.5" /> Xóa câu
+                  </button>
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                      Ảnh đề (tùy chọn)
+                    </label>
+                    <input
+                      ref={(element) => {
+                        essayInputRefs.current[String(question.id)] = element;
+                      }}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void addShortAnswerImage(question.id, file);
+                        event.target.value = '';
+                      }}
+                    />
+                    {question.questionImage ? (
+                      <div className="relative flex h-32 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-1">
+                        <img
+                          src={question.questionImage}
+                          alt="Ảnh đề"
+                          className="max-h-full max-w-full rounded-lg object-contain"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updateShortAnswer(question.id, { questionImage: '' })}
+                          className="absolute right-1 top-1 rounded-full bg-rose-600 p-1 text-white"
+                          aria-label="Xóa ảnh câu hỏi"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => essayInputRefs.current[String(question.id)]?.click()}
+                        className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-sky-300 bg-white text-sky-600 transition hover:border-sky-400 hover:bg-sky-50/50"
+                      >
+                        <ImagePlus className="size-5" />
+                        <span className="text-[11px] font-bold">Chọn ảnh đề</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                        Nội dung câu hỏi
+                      </label>
+                      <textarea
+                        value={question.content}
+                        onChange={(event) =>
+                          updateShortAnswer(question.id, { content: event.target.value })
+                        }
+                        rows={2}
+                        placeholder="Ví dụ: Tính giá trị của biểu thức..."
+                        className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                        Đáp án đúng <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={question.answer}
+                        onChange={(event) =>
+                          updateShortAnswer(question.id, { answer: event.target.value })
+                        }
+                        placeholder="Ví dụ: 4 | bốn | 2^2 (nhiều đáp án cách nhau bởi | hoặc ;)"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-sky-700 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                      />
+                      <p className="mt-1 text-[10px] font-medium text-slate-400">
+                        Không phân biệt hoa thường, tự động chấp nhận 0,5 và 0.5.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                        Hướng dẫn chấm (tùy chọn)
+                      </label>
+                      <input
+                        type="text"
+                        value={question.rubric || ''}
+                        onChange={(event) =>
+                          updateShortAnswer(question.id, { rubric: event.target.value })
+                        }
+                        placeholder="Ví dụ: Đúng đơn vị mới được tính điểm..."
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={() =>
+                setShortAnswerQuestions((current) => [
+                  ...current,
+                  createEmptyShortAnswer(1 + current.length),
+                ])
+              }
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-sky-300 py-3.5 text-xs font-bold text-sky-700 transition hover:bg-sky-50"
+            >
+              <Plus className="size-4" />
+              Thêm câu trả lời ngắn
+            </button>
+          </div>
+        </section>
+
+        {/* STEP 4 */}
+        <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
+          <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
+            <NumberBadge>4</NumberBadge>
             <div>
               <h2 className="text-sm font-black text-slate-900">Phần tự luận</h2>
               <p className="text-[11px] font-medium text-slate-400">Chia câu hỏi thành các ý a, b, c... và đặt điểm tương ứng</p>
@@ -586,7 +924,12 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
               const subPartTotal = Number(question.subParts.reduce((sum, part) => sum + part.points, 0).toFixed(2));
               const outOfSync = Math.abs(subPartTotal - question.points) > 0.01;
               return (
-                <div key={question.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+                <div
+                  key={question.id}
+                  data-paste-question="essay"
+                  data-paste-id={String(question.id)}
+                  className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5"
+                >
                   <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="flex size-8 items-center justify-center rounded-xl bg-white text-xs font-black text-emerald-700 shadow-sm ring-1 ring-slate-200">
@@ -655,7 +998,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
                           className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-teal-300 bg-white text-teal-600 transition hover:border-teal-400 hover:bg-teal-50/50"
                         >
                           <ImagePlus className="size-5" />
-                          <span className="text-[11px] font-bold">Chọn ảnh đề</span>
+                          <span className="text-[11px] font-bold">Chọn ảnh / dán Ctrl + V</span>
                         </button>
                       )}
                     </div>
@@ -754,7 +1097,8 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
           </span>
           <div>
             <p className="text-xs font-black text-slate-800">
-              {mcqCount} câu trắc nghiệm · {essayQuestions.length} câu tự luận
+              {effectiveMcqCount} câu trắc nghiệm · {shortAnswerQuestions.length} câu trả lời ngắn ·{' '}
+              {essayQuestions.length} câu tự luận
             </p>
             <p className="text-[11px] font-medium text-slate-400">
               Tổng điểm cấu hình {formatNumber(configuredPoints, 2)} / {formatNumber(totalPoints, 2)} điểm

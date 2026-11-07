@@ -1,4 +1,4 @@
-import type { ClipboardEvent } from 'react';
+import type { ClipboardEvent as ReactClipboardEvent } from 'react';
 
 function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -59,7 +59,9 @@ export function dataUrlFromBlob(blob: Blob): Promise<string> {
   });
 }
 
-export function imageFilesFromClipboard(event: ClipboardEvent): File[] {
+export function imageFilesFromClipboard(
+  event: Pick<ReactClipboardEvent | globalThis.ClipboardEvent, 'clipboardData'>,
+): File[] {
   const items = event.clipboardData?.items;
   if (!items) return [];
   const files: File[] = [];
