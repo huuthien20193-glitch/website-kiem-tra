@@ -159,6 +159,8 @@ export type SubmissionRow = {
   student_mcq_answers: Record<number, number> | number[]
   correct_mcq_answers: number[]
   mcq_images: string[] | null
+  mcq_explanation_enabled?: boolean | null
+  mcq_explanations?: unknown[] | null
   short_answer_details?: unknown[] | null
   essay_details: unknown[] | null
   status: string
@@ -180,6 +182,8 @@ export function mapSubmissionToRow(submission: Submission) {
     student_mcq_answers: submission.studentMcqAnswers,
     correct_mcq_answers: submission.correctMcqAnswers,
     mcq_images: submission.mcqImages,
+    mcq_explanation_enabled: submission.mcqExplanationEnabled === true,
+    mcq_explanations: submission.mcqExplanations ?? [],
     short_answer_details: submission.shortAnswerDetails,
     essay_details: submission.essayDetails,
     status: submission.status,
@@ -202,6 +206,8 @@ export function mapRowToSubmission(row: SubmissionRow): Submission {
     studentMcqAnswers: row.student_mcq_answers as Record<number, number>,
     correctMcqAnswers: row.correct_mcq_answers,
     mcqImages: row.mcq_images ?? [],
+    mcqExplanationEnabled: row.mcq_explanation_enabled === true,
+    mcqExplanations: (row.mcq_explanations ?? []) as Submission['mcqExplanations'],
     shortAnswerDetails: (row.short_answer_details ?? []) as Submission['shortAnswerDetails'],
     essayDetails: (row.essay_details ?? []) as Submission['essayDetails'],
     status: row.status,

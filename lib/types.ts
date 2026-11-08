@@ -15,6 +15,12 @@ export type EssayQuestion = {
   rubric?: string;
 };
 
+/** Lời giải một câu trắc nghiệm: text và/hoặc ảnh, giáo viên soạn khi tạo đề. */
+export type McqExplanation = {
+  text: string;
+  images: string[];
+};
+
 /** Câu trả lời ngắn: học sinh gõ đáp án, hệ thống tự chấm theo `answer`. */
 export type ShortAnswerQuestion = {
   id: string | number;
@@ -43,6 +49,9 @@ export type Exam = {
   mcqCount: number;
   mcqPointPerQ: number;
   mcqAnswers: number[];
+  /** Bật để học sinh xem lời giải sau khi nộp bài. */
+  mcqExplanationEnabled?: boolean;
+  mcqExplanations?: McqExplanation[];
   shortAnswerQuestions: ShortAnswerQuestion[];
   essayQuestions: EssayQuestion[];
   createdAt?: string;
@@ -85,6 +94,9 @@ export type Submission = {
   studentMcqAnswers: Record<number, number>;
   correctMcqAnswers: number[];
   mcqImages: string[];
+  /** Bản chụp lời giải của đề lúc nộp, để trang kết quả hiện được mà không cần tải lại đề. */
+  mcqExplanationEnabled?: boolean;
+  mcqExplanations?: McqExplanation[];
   shortAnswerDetails: ShortAnswerDetail[];
   essayDetails: EssayDetail[];
   status: string;

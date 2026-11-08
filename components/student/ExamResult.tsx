@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   CircleX,
   Clock3,
+  Lightbulb,
   Printer,
   Trophy,
   X,
@@ -22,12 +23,15 @@ type ExamResultProps = {
 
 export function ExamResult({ submission, onBack }: ExamResultProps) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showExplanation, setShowExplanation] = useState(false);
   const pending = isPending(submission.status);
   const shortAnswerDetails = submission.shortAnswerDetails || [];
   const shortAnswerScore = shortAnswerDetails.reduce((sum, detail) => sum + detail.score, 0);
   const mcqScore = Math.max(0, Number((submission.autoScore - shortAnswerScore).toFixed(1)));
   const essayScore = Math.max(0, Number((submission.score - submission.autoScore).toFixed(1)));
   const correctPercent = progressPercent(submission.mcqCorrectCount, submission.mcqCount);
+  const explanationEnabled = submission.mcqExplanationEnabled === true;
+  const getExplanation = (index: number) => submission.mcqExplanations?.[index];
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans">
@@ -120,6 +124,22 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
               <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700">
                 {correctPercent}% chính xác
               </span>
+              {explanationEnabled && submission.correctMcqAnswers.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowExplanation((current) => !current)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-black transition',
+                    showExplanation
+                      ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-300'
+                      : 'bg-slate-100 text-slate-600 hover:bg-amber-50 hover:text-amber-800',
+                  )}
+                  aria-pressed={showExplanation}
+                >
+                  <Lightbulb className="size-3.5" />
+                  {showExplanation ? 'Ẩn lời giải' : 'Xem lời giải'}
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -132,31 +152,61 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                   <div
                     key={index}
                     className={cn(
-                      'flex items-center justify-between rounded-2xl border px-3 py-2.5',
+                      'rounded-2xl border px-3 py-2.5',
                       isCorrect ? 'border-emerald-200 bg-emerald-50/60' : 'border-rose-200 bg-rose-50/60',
                     )}
                   >
-                    <div className="flex items-center gap-2">
-                      {isCorrect ? (
-                        <CheckCircle2 className="size-4 text-emerald-600" />
-                      ) : (
-                        <CircleX className="size-4 text-rose-500" />
-                      )}
-                      <span className="text-xs font-black text-slate-800">Câu {index + 1}</span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[11px] font-bold text-slate-600">
-                        Bạn chọn:{' '}
-                        <span className={isCorrect ? 'text-emerald-700' : 'text-rose-600'}>
-                          {studentOption !== undefined ? OPTION_LABELS[studentOption] : 'Bỏ trống'}
-                        </span>
-                      </p>
-                      {!isCorrect ? (
-                        <p className="text-[10px] font-semibold text-slate-400">
-                          Đáp án: <span className="font-black text-emerald-700">{OPTION_LABELS[correctOption]}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {isCorrect ? (
+                          <CheckCircle2 className="size-4 text-emerald-600" />
+                        ) : (
+                          <CircleX className="size-4 text-rose-500" />
+                        )}
+                        <span className="text-xs font-black text-slate-800">Câu {index + 1}</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[11px] font-bold text-slate-600">
+                          Bạn chọn:{' '}
+                          <span className={isCorrect ? 'text-emerald-700' : 'text-rose-600'}>
+                            {studentOption !== undefined ? OPTION_LABELS[studentOption] : 'Bỏ trống'}
+                          </span>
                         </p>
-                      ) : null}
+                        {!isCorrect ? (
+                          <p className="text-[10px] font-semibold text-slate-400">
+                            Đáp án: <span className="font-black text-emerald-700">{OPTION_LABELS[correctOption]}</span>
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
+
+                    {showExplanation && explanationEnabled ? (
+                      <div className="mt-2 border-t border-slate-200/70 pt-2">
+                        {getExplanation(index)?.text ? (
+                          <p className="whitespace-pre-line text-[10px] font-medium leading-relaxed text-slate-600">
+                            {getExplanation(index)?.text}
+                          </p>
+                        ) : (
+                          <p className="text-[10px] font-medium italic text-slate-400">
+                            Không có lời giải cho câu này.
+                          </p>
+                        )}
+                        {getExplanation(index)?.images && getExplanation(index)!.images.length > 0 ? (
+                          <div className="mt-2 grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+                            {getExplanation(index)!.images.map((image, imageIndex) => (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                key={imageIndex}
+                                src={image}
+                                alt={`Lời giải câu ${index + 1} - ảnh ${imageIndex + 1}`}
+                                onClick={() => setPreviewImage(image)}
+                                className="h-16 w-full cursor-zoom-in rounded-lg border border-slate-200 bg-slate-900 object-contain p-0.5"
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

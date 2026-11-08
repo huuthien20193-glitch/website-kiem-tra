@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Check,
+  ChevronDown,
   CircleAlert,
   GraduationCap,
   ImagePlus,
   Layers,
+  Lightbulb,
   Plus,
   Save,
   Trash2,
@@ -17,6 +19,7 @@ import type {
   Exam,
   ExamType,
   Grade,
+  McqExplanation,
   ShortAnswerQuestion,
   SubPart,
 } from '@/lib/types';
@@ -92,6 +95,13 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
   const [mcqCount, setMcqCount] = useState(10);
   const [mcqPointPerQ, setMcqPointPerQ] = useState(0.5);
   const [mcqAnswers, setMcqAnswers] = useState<number[]>(Array(10).fill(0));
+  const [mcqExplanationEnabled, setMcqExplanationEnabled] = useState(false);
+  const [mcqExplanations, setMcqExplanations] = useState<McqExplanation[]>(() =>
+    Array.from({ length: 10 }, () => ({ text: '', images: [] })),
+  );
+  const [openExplanation, setOpenExplanation] = useState<number | null>(null);
+  const explanationInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -119,6 +129,9 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
     const safe = Math.min(60, Math.max(1, Math.round(Number(value) || 1)));
     setMcqCount(safe);
     setMcqAnswers((current) => Array.from({ length: safe }, (_, index) => current[index] ?? 0));
+    setMcqExplanations((current) =>
+      Array.from({ length: safe }, (_, index) => current[index] ?? { text: '', images: [] }),
+    );
   };
 
   const addMcqFiles = async (files: File[]) => {
@@ -138,6 +151,45 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
     } finally {
       setUploading(false);
     }
+  };
+
+  const addExplanationImages = async (index: number, files: File[]) => {
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const optimized = await Promise.all(
+        files.map((file) => optimizeImage(file).catch(() => null)),
+      );
+      const valid = optimized.filter((image): image is string => Boolean(image));
+      if (valid.length === 0) {
+        toast.error('Không thể đọc ảnh', 'Vui lòng chọn tệp ảnh hợp lệ.');
+        return;
+      }
+      setMcqExplanations((current) =>
+        current.map((item, i) =>
+          i === index ? { ...item, images: [...item.images, ...valid] } : item,
+        ),
+      );
+      toast.success('Đã thêm ảnh lời giải', `${valid.length} ảnh cho câu ${index + 1}.`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const updateExplanation = (index: number, patch: Partial<McqExplanation>) => {
+    setMcqExplanations((current) =>
+      current.map((item, i) => (i === index ? { ...item, ...patch } : item)),
+    );
+  };
+
+  const removeExplanationImage = (index: number, imageIndex: number) => {
+    setMcqExplanations((current) =>
+      current.map((item, i) =>
+        i === index
+          ? { ...item, images: item.images.filter((_, imgIndex) => imgIndex !== imageIndex) }
+          : item,
+      ),
+    );
   };
 
   const addEssayImage = async (questionId: string | number, file: File) => {
@@ -187,6 +239,13 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
       const files = imageFilesFromClipboard(event);
       if (files.length === 0) return;
       const target = event.target instanceof Element ? event.target : null;
+      const explanationBlock = target?.closest<HTMLElement>('[data-paste-explanation-index]');
+      if (explanationBlock) {
+        event.preventDefault();
+        const index = Number(explanationBlock.dataset.pasteExplanationIndex);
+        if (Number.isFinite(index)) void addExplanationImages(index, files);
+        return;
+      }
       const block = target?.closest<HTMLElement>('[data-paste-question]');
       if (block) {
         const type = block.dataset.pasteQuestion;
@@ -287,6 +346,9 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
     setMcqCount(10);
     setMcqPointPerQ(0.5);
     setMcqAnswers(Array(10).fill(0));
+    setMcqExplanationEnabled(false);
+    setMcqExplanations(Array.from({ length: 10 }, () => ({ text: '', images: [] })));
+    setOpenExplanation(null);
     setShortAnswerQuestions([]);
     setEssayQuestions([createEmptyEssay(7)]);
   };
@@ -333,6 +395,13 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
       mcqCount: effectiveMcqCount,
       mcqPointPerQ: Number(mcqPointPerQ),
       mcqAnswers: hasMcq ? mcqAnswers.slice(0, mcqCount) : [],
+      mcqExplanationEnabled: hasMcq ? mcqExplanationEnabled : false,
+      mcqExplanations: hasMcq
+        ? mcqExplanations.slice(0, effectiveMcqCount).map((item) => ({
+            text: (item.text || '').trim(),
+            images: item.images,
+          }))
+        : [],
       shortAnswerQuestions: shortAnswerQuestions.map((question) => ({
         ...question,
         questionLabel: question.questionLabel.trim() || 'Câu trả lời ngắn',
@@ -719,6 +788,152 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
               ))}
             </div>
           </div>
+
+          <div className="mt-6 border-t border-slate-100 pt-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <label className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-600">
+                  <Lightbulb className="size-4 text-amber-500" />
+                  Lời giải từng câu <span className="font-medium normal-case text-slate-400">(tùy chọn)</span>
+                </label>
+                <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                  Ghi bằng chữ hoặc ảnh. Bật công tắc để học sinh xem lời giải sau khi nộp bài và ra điểm.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={mcqExplanationEnabled}
+                onClick={() => setMcqExplanationEnabled((current) => !current)}
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-black transition',
+                  mcqExplanationEnabled
+                    ? 'border-amber-300 bg-amber-50 text-amber-800'
+                    : 'border-slate-200 bg-slate-50 text-slate-500',
+                )}
+              >
+                <span
+                  className={cn(
+                    'relative h-4 w-7 rounded-full transition',
+                    mcqExplanationEnabled ? 'bg-amber-500' : 'bg-slate-300',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'absolute top-0.5 size-3 rounded-full bg-white shadow-sm transition-all',
+                      mcqExplanationEnabled ? 'left-3.5' : 'left-0.5',
+                    )}
+                  />
+                </span>
+                {mcqExplanationEnabled ? 'Học sinh xem được lời giải' : 'Ẩn lời giải'}
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              {Array.from({ length: mcqCount }).map((_, index) => {
+                const explanation = mcqExplanations[index] ?? { text: '', images: [] };
+                const hasContent = explanation.text.trim().length > 0 || explanation.images.length > 0;
+                const open = openExplanation === index;
+                return (
+                  <div
+                    key={index}
+                    data-paste-explanation-index={index}
+                    className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/60"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setOpenExplanation(open ? null : index)}
+                      className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition hover:bg-slate-100/60"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-[10px] font-black text-slate-600 ring-1 ring-slate-200">
+                          {index + 1}
+                        </span>
+                        <span
+                          className={cn(
+                            'text-[11px] font-bold',
+                            hasContent ? 'text-emerald-700' : 'text-slate-400',
+                          )}
+                        >
+                          {hasContent ? 'Đã có lời giải' : 'Chưa có lời giải'}
+                        </span>
+                      </span>
+                      <ChevronDown
+                        className={cn('size-4 shrink-0 text-slate-400 transition-transform', open && 'rotate-180')}
+                      />
+                    </button>
+
+                    {open ? (
+                      <div className="border-t border-slate-200 p-3">
+                        <textarea
+                          value={explanation.text}
+                          onChange={(event) => updateExplanation(index, { text: event.target.value })}
+                          rows={2}
+                          placeholder={`Giải thích tại sao đáp án ${OPTION_LABELS[mcqAnswers[index] ?? 0]} đúng...`}
+                          className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
+                        />
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <input
+                            ref={(element) => {
+                              explanationInputRefs.current[index] = element;
+                            }}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            onChange={(event) => {
+                              void addExplanationImages(index, Array.from(event.target.files || []));
+                              event.target.value = '';
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => explanationInputRefs.current[index]?.click()}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800 transition hover:bg-amber-100"
+                          >
+                            <ImagePlus className="size-4" />
+                            Thêm ảnh / dán Ctrl + V
+                          </button>
+                          {explanation.images.length > 0 ? (
+                            <span className="text-[10px] font-bold text-slate-400">
+                              {explanation.images.length} ảnh
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {explanation.images.length > 0 ? (
+                          <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                            {explanation.images.map((image, imageIndex) => (
+                              <div
+                                key={imageIndex}
+                                className="group relative flex h-20 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-1"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={image}
+                                  alt={`Lời giải câu ${index + 1} - ảnh ${imageIndex + 1}`}
+                                  onClick={() => setPreviewImage(image)}
+                                  className="max-h-full max-w-full cursor-zoom-in rounded-lg object-contain"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeExplanationImage(index, imageIndex)}
+                                  className="absolute right-1 top-1 rounded-full bg-rose-600 p-1 text-white opacity-0 shadow transition group-hover:opacity-100"
+                                  aria-label="Xóa ảnh"
+                                >
+                                  <X className="size-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
           </>
           ) : (
             <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
@@ -1089,6 +1304,22 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
           </div>
         </section>
       </div>
+
+      {previewImage ? (
+        <button
+          type="button"
+          onClick={() => setPreviewImage(null)}
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/85 p-4"
+          aria-label="Đóng ảnh"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewImage}
+            alt="Ảnh lời giải phóng to"
+            className="max-h-[90vh] max-w-full rounded-2xl object-contain shadow-2xl"
+          />
+        </button>
+      ) : null}
 
       <div className="sticky bottom-4 z-20 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-xl shadow-slate-900/5 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">

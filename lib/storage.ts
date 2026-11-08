@@ -3,6 +3,7 @@ import type {
   EssayQuestion,
   Exam,
   Grade,
+  McqExplanation,
   ShortAnswerDetail,
   ShortAnswerQuestion,
   Submission,
@@ -83,6 +84,26 @@ export function normalizeEssayQuestion(raw: Partial<EssayQuestion>, index: numbe
   };
 }
 
+function normalizeMcqExplanation(
+  raw: Partial<McqExplanation> | undefined,
+): McqExplanation {
+  const imagesSource = raw?.images;
+  return {
+    text: typeof raw?.text === 'string' ? raw.text : '',
+    images: Array.isArray(imagesSource)
+      ? imagesSource.filter((image): image is string => typeof image === 'string')
+      : [],
+  };
+}
+
+export function normalizeMcqExplanations(raw: unknown, expectedCount: number): McqExplanation[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const safeCount = Math.min(100, Math.max(0, expectedCount));
+  return Array.from({ length: safeCount }, (_, index) =>
+    normalizeMcqExplanation((list[index] ?? {}) as Partial<McqExplanation>),
+  );
+}
+
 export function normalizeShortAnswerQuestion(
   raw: Partial<ShortAnswerQuestion>,
   index: number,
@@ -123,6 +144,8 @@ export function normalizeExam(raw: Partial<Exam>): Exam {
     mcqCount,
     mcqPointPerQ: Math.max(0, asNumber(raw?.mcqPointPerQ, 0.5)),
     mcqAnswers,
+    mcqExplanationEnabled: raw?.mcqExplanationEnabled === true,
+    mcqExplanations: normalizeMcqExplanations(raw?.mcqExplanations, mcqCount),
     shortAnswerQuestions: Array.isArray(raw?.shortAnswerQuestions)
       ? raw.shortAnswerQuestions.map((question, index) =>
           normalizeShortAnswerQuestion(question, index),
@@ -205,6 +228,12 @@ export function normalizeSubmission(raw: Partial<Submission>): Submission {
     studentMcqAnswers,
     correctMcqAnswers,
     mcqImages: Array.isArray(raw?.mcqImages) ? raw.mcqImages.filter((image): image is string => typeof image === 'string') : [],
+    mcqExplanationEnabled: raw?.mcqExplanationEnabled === true,
+    mcqExplanations: Array.isArray(raw?.mcqExplanations)
+      ? raw.mcqExplanations.map((item) =>
+          normalizeMcqExplanation((item ?? {}) as Partial<McqExplanation>),
+        )
+      : [],
     shortAnswerDetails,
     essayDetails,
     status:
@@ -399,6 +428,8 @@ export function buildSubmission(
     studentMcqAnswers: mcqAnswers,
     correctMcqAnswers: exam.mcqAnswers,
     mcqImages: exam.mcqImages,
+    mcqExplanationEnabled: exam.mcqExplanationEnabled === true,
+    mcqExplanations: exam.mcqExplanations ? [...exam.mcqExplanations] : [],
     shortAnswerDetails,
     essayDetails,
     status: pending ? 'Chờ giáo viên chấm tự luận' : 'Đã chấm điểm hoàn tất',
