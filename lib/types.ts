@@ -31,6 +31,8 @@ export type ShortAnswerQuestion = {
   /** Đáp án đúng. Nhiều đáp án hợp lệ cách nhau bởi `|`, `;` hoặc xuống dòng. */
   answer: string;
   rubric?: string;
+  /** Lời giải hiển thị cho học sinh sau khi nộp bài (khi giáo viên bật công tắc). */
+  explanation?: McqExplanation;
 };
 
 export type ExamType = 'official' | 'practice';
@@ -79,6 +81,8 @@ export type ShortAnswerDetail = {
   correct: boolean;
   score: number;
   comment: string;
+  /** Lời giải của giáo viên, hiển thị cho học sinh sau khi nộp bài. */
+  explanation?: McqExplanation;
 };
 
 export type Submission = {

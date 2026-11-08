@@ -124,7 +124,8 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
               <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700">
                 {correctPercent}% chính xác
               </span>
-              {explanationEnabled && submission.correctMcqAnswers.length > 0 ? (
+              {explanationEnabled &&
+              (submission.correctMcqAnswers.length > 0 || shortAnswerDetails.length > 0) ? (
                 <button
                   type="button"
                   onClick={() => setShowExplanation((current) => !current)}
@@ -300,6 +301,34 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                         </div>
                       ) : null}
                     </div>
+
+                    {showExplanation && explanationEnabled ? (
+                      <div className="mt-2 border-t border-slate-200/70 pt-2">
+                        {detail.explanation?.text ? (
+                          <p className="whitespace-pre-line text-[10px] font-medium leading-relaxed text-slate-600">
+                            {detail.explanation.text}
+                          </p>
+                        ) : (
+                          <p className="text-[10px] font-medium italic text-slate-400">
+                            Không có lời giải cho câu này.
+                          </p>
+                        )}
+                        {detail.explanation?.images && detail.explanation.images.length > 0 ? (
+                          <div className="mt-2 grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+                            {detail.explanation.images.map((image, imageIndex) => (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                key={imageIndex}
+                                src={image}
+                                alt={`Lời giải ${detail.questionLabel} - ảnh ${imageIndex + 1}`}
+                                onClick={() => setPreviewImage(image)}
+                                className="h-16 w-full cursor-zoom-in rounded-lg border border-slate-200 bg-slate-900 object-contain p-0.5"
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

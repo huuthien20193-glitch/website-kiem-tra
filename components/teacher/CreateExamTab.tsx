@@ -82,6 +82,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
   const toast = useToast();
   const mcqInputRef = useRef<HTMLInputElement>(null);
   const essayInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const shortExplanationInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('Toán học');
@@ -226,6 +227,57 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
     }
   };
 
+  const updateShortExplanation = (
+    questionId: string | number,
+    patch: Partial<McqExplanation>,
+  ) => {
+    setShortAnswerQuestions((current) =>
+      current.map((question) => {
+        if (question.id !== questionId) return question;
+        const explanation = question.explanation ?? { text: '', images: [] };
+        return { ...question, explanation: { ...explanation, ...patch } };
+      }),
+    );
+  };
+
+  const addShortExplanationImages = async (questionId: string | number, files: File[]) => {
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const optimized = await Promise.all(
+        files.map((file) => optimizeImage(file).catch(() => null)),
+      );
+      const valid = optimized.filter((image): image is string => Boolean(image));
+      if (valid.length === 0) {
+        toast.error('Không thể đọc ảnh', 'Vui lòng chọn tệp ảnh hợp lệ.');
+        return;
+      }
+      setShortAnswerQuestions((current) =>
+        current.map((question) => {
+          if (question.id !== questionId) return question;
+          const explanation = question.explanation ?? { text: '', images: [] };
+          return { ...question, explanation: { ...explanation, images: [...explanation.images, ...valid] } };
+        }),
+      );
+      toast.success('Đã thêm ảnh lời giải', `${valid.length} ảnh cho câu trả lời ngắn.`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeShortExplanationImage = (questionId: string | number, imageIndex: number) => {
+    setShortAnswerQuestions((current) =>
+      current.map((question) => {
+        if (question.id !== questionId) return question;
+        const explanation = question.explanation ?? { text: '', images: [] };
+        return {
+          ...question,
+          explanation: { ...explanation, images: explanation.images.filter((_, index) => index !== imageIndex) },
+        };
+      }),
+    );
+  };
+
   // Dán ảnh (Ctrl + V) ở bất kỳ đâu trong form đều thêm đúng chỗ:
   // paste bên trong khối câu trả lời ngắn/tự luận -> ảnh của câu đó,
   // ngược lại -> ảnh đề trắc nghiệm.
@@ -244,6 +296,13 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
         event.preventDefault();
         const index = Number(explanationBlock.dataset.pasteExplanationIndex);
         if (Number.isFinite(index)) void addExplanationImages(index, files);
+        return;
+      }
+      const shortExplanationBlock = target?.closest<HTMLElement>('[data-paste-short-explanation]');
+      if (shortExplanationBlock) {
+        event.preventDefault();
+        const id = shortExplanationBlock.dataset.pasteShortExplanation;
+        if (id) void addShortExplanationImages(id, files);
         return;
       }
       const block = target?.closest<HTMLElement>('[data-paste-question]');
@@ -797,7 +856,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
                   Lời giải từng câu <span className="font-medium normal-case text-slate-400">(tùy chọn)</span>
                 </label>
                 <p className="mt-0.5 text-[11px] font-medium text-slate-400">
-                  Ghi bằng chữ hoặc ảnh. Bật công tắc để học sinh xem lời giải sau khi nộp bài và ra điểm.
+                  Ghi bằng chữ hoặc ảnh. Bật công tắc để học sinh xem lời giải (trắc nghiệm + trả lời ngắn) sau khi nộp bài và ra điểm.
                 </p>
               </div>
               <button
@@ -1102,6 +1161,75 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
                         placeholder="Ví dụ: Đúng đơn vị mới được tính điểm..."
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
                       />
+                    </div>
+                    <div
+                      data-paste-short-explanation={String(question.id)}
+                      className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3"
+                    >
+                      <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-amber-700">
+                        Lời giải (tùy chọn) — học sinh xem sau khi nộp bài
+                      </label>
+                      <textarea
+                        value={question.explanation?.text ?? ''}
+                        onChange={(event) => updateShortExplanation(question.id, { text: event.target.value })}
+                        rows={2}
+                        placeholder="Ví dụ: Vì 2² = 4, nên căn bậc hai của 4 là ±2..."
+                        className="w-full resize-y rounded-xl border border-amber-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
+                      />
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <input
+                          ref={(element) => {
+                            shortExplanationInputRefs.current[String(question.id)] = element;
+                          }}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={(event) => {
+                            void addShortExplanationImages(question.id, Array.from(event.target.files || []));
+                            event.target.value = '';
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => shortExplanationInputRefs.current[String(question.id)]?.click()}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800 transition hover:bg-amber-100"
+                        >
+                          <ImagePlus className="size-4" />
+                          Thêm ảnh / dán Ctrl + V
+                        </button>
+                        {question.explanation?.images && question.explanation.images.length > 0 ? (
+                          <span className="text-[10px] font-bold text-slate-500">
+                            {question.explanation.images.length} ảnh
+                          </span>
+                        ) : null}
+                      </div>
+                      {question.explanation?.images && question.explanation.images.length > 0 ? (
+                        <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                          {question.explanation.images.map((image, imageIndex) => (
+                            <div
+                              key={imageIndex}
+                              className="group relative flex h-20 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-1"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={image}
+                                alt={`Lời giải câu trả lời ngắn - ảnh ${imageIndex + 1}`}
+                                onClick={() => setPreviewImage(image)}
+                                className="max-h-full max-w-full cursor-zoom-in rounded-lg object-contain"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeShortExplanationImage(question.id, imageIndex)}
+                                className="absolute right-1 top-1 rounded-full bg-rose-600 p-1 text-white opacity-0 shadow transition group-hover:opacity-100"
+                                aria-label="Xóa ảnh"
+                              >
+                                <X className="size-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>

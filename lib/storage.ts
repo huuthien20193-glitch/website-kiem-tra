@@ -119,6 +119,9 @@ export function normalizeShortAnswerQuestion(
     content: typeof raw?.content === 'string' ? raw.content : '',
     answer: typeof raw?.answer === 'string' ? raw.answer : '',
     rubric: typeof raw?.rubric === 'string' ? raw.rubric : '',
+    explanation: raw?.explanation
+      ? normalizeMcqExplanation(raw.explanation as Partial<McqExplanation>)
+      : undefined,
   };
 }
 
@@ -208,6 +211,9 @@ export function normalizeSubmission(raw: Partial<Submission>): Submission {
         correct: Boolean(detail?.correct),
         score: Math.max(0, asNumber(detail?.score, 0)),
         comment: typeof detail?.comment === 'string' ? detail.comment : '',
+        explanation: detail?.explanation
+          ? normalizeMcqExplanation(detail.explanation as Partial<McqExplanation>)
+          : undefined,
       }))
     : [];
 
@@ -393,6 +399,7 @@ export function buildSubmission(
       correct,
       score: correct ? question.points : 0,
       comment: '',
+      explanation: question.explanation,
     };
   });
   const shortScore = round1(
