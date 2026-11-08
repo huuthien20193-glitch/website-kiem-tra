@@ -64,13 +64,17 @@ Mở [http://localhost:3000](http://localhost:3000).
 
 ### 5. Triển khai trên Render
 
-Khi tạo **Web Service** trên [render.com](https://render.com):
+Dự án có sẵn [`render.yaml`](./render.yaml) (Render Blueprint) nên cách deploy nhanh nhất:
 
-- **Build Command:** `npm install; npm run build`
-- **Start Command:** `npm run start`
-- **Environment Variables:** thêm `NEXT_PUBLIC_SUPABASE_URL` và `NEXT_PUBLIC_SUPABASE_ANON_KEY` (cùng giá trị trong `.env.local`).
+1. Vào [render.com](https://render.com) → **New +** → **Blueprint** → chọn repo `website-kiem-tra`.
+2. Khi được hỏi, nhập 2 biến môi trường (cùng giá trị trong `.env.local`):
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+3. **Apply** → đợi build xong → website chạy tại URL do Render cấp (dạng `https://website-kiem-tra.onrender.com`).
 
-Lưu ý: biến `NEXT_PUBLIC_*` được nhúng vào lúc build, nên sau khi thêm/sửa biến môi trường trên Render phải **redeploy** thì trang mới nhận cấu hình mới. Nếu chưa chạy `supabase_schema.sql`, việc tạo đề sẽ báo lỗi thiếu cột `data`.
+Nếu không muốn dùng Blueprint: **New + → Web Service** → chọn repo → **Build Command** `npm install && npm run build`, **Start Command** `npm start`, Node `20`.
+
+Lưu ý: biến `NEXT_PUBLIC_*` được nhúng vào lúc build, nên sau khi thêm/sửa biến môi trường trên Render phải **redeploy** thì trang mới nhận cấu hình mới. Nếu chưa chạy `supabase_schema.sql`, việc tạo đề sẽ báo lỗi thiếu cột `data`. Gói **free** của Render sẽ tự "ngủ" khi không có truy cập, lần vào đầu có thể chậm vài chục giây.
 
 ## 📁 Cấu trúc thư mục
 
