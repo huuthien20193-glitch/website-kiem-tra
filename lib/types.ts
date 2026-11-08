@@ -68,6 +68,10 @@ export type EssayDetail = {
   score: number;
   comment: string;
   graded: boolean;
+  /** Cấu trúc từng ý kèm điểm tối đa, để giáo viên chấm chi tiết từng ý. */
+  subParts?: SubPart[];
+  /** Điểm giáo viên cho từng ý (theo index của subParts). */
+  subPartScores?: Record<number, number>;
 };
 
 export type ShortAnswerDetail = {

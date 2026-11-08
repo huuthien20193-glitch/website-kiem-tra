@@ -12,14 +12,63 @@ type GradingModalProps = {
   onSave: (updated: Submission) => void;
 };
 
-type ScoreState = Record<string, { score: number; comment: string }>;
+type EssayScoreState = Record<string, { subParts: Record<number, number>; score: number; comment: string }>;
+
+const clampPoints = (max: number, value: number) => {
+  const safeMax = Math.max(0, Number(max) || 0);
+  return Math.min(safeMax, Math.max(0, Number.isFinite(value) ? value : 0));
+};
+
+const round1Safe = (value: number) => Math.round(value * 10) / 10;
+
+/**
+ * Khởi tạo điểm từng ý từ dữ liệu đã lưu.
+ * - Nếu đã có subPartScores (chấm lại), lấy ra trực tiếp (kẹp trong 0..maxPoints).
+ * - Nếu chưa có nhưng có điểm câu cũ, chia tỉ lệ theo điểm tối đa của từng ý rồi điều chỉnh để tổng khớp đúng điểm cũ.
+ */
+const distributeScore = (detail: import('@/lib/types').EssayDetail): Record<number, number> => {
+  const parts = detail.subParts ?? [];
+  const result: Record<number, number> = {};
+  if (parts.length === 0) return result;
+  parts.forEach((_, index) => (result[index] = 0));
+
+  if (detail.subPartScores && Object.keys(detail.subPartScores).length > 0) {
+    parts.forEach((part, index) => {
+      result[index] = clampPoints(Number(part.points) || 0, Number(detail.subPartScores?.[index]) || 0);
+    });
+    return result;
+  }
+
+  const target = clampPoints(detail.maxPoints, detail.score || 0);
+  const partPoints = parts.map((part) => Math.max(0, Number(part.points) || 0));
+  const totalPartPoints = partPoints.reduce((sum, value) => sum + value, 0);
+  if (target <= 0 || totalPartPoints <= 0) return result;
+
+  let allocated = 0;
+  parts.forEach((_, index) => {
+    const raw = (target * partPoints[index]) / totalPartPoints;
+    result[index] = clampPoints(partPoints[index], round1Safe(raw));
+    allocated = round1Safe(allocated + result[index]);
+  });
+
+  let diff = round1Safe(target - allocated);
+  for (let i = parts.length - 1; i >= 0 && Math.abs(diff) >= 0.01; i -= 1) {
+    const max = partPoints[i];
+    const room = round1Safe(max - result[i]);
+    const apply = Math.sign(diff) * Math.min(Math.abs(diff), room);
+    result[i] = clampPoints(max, round1Safe(result[i] + apply));
+    diff = round1Safe(diff - apply);
+  }
+  return result;
+};
 
 export function GradingModal({ submission, onClose, onSave }: GradingModalProps) {
-  const [scores, setScores] = useState<ScoreState>(() => {
-    const initial: ScoreState = {};
+  const [scores, setScores] = useState<EssayScoreState>(() => {
+    const initial: EssayScoreState = {};
     submission.essayDetails.forEach((detail) => {
       initial[String(detail.questionId)] = {
-        score: detail.score || 0,
+        subParts: distributeScore(detail),
+        score: Math.min(detail.maxPoints, Math.max(0, detail.score || 0)),
         comment: detail.comment || '',
       };
     });
@@ -43,14 +92,22 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
     };
   }, [onClose, previewImage]);
 
+  const questionScoreOf = (detail: Submission['essayDetails'][number]) => {
+    const parts = detail.subParts ?? [];
+    const state = scores[String(detail.questionId)];
+    if (parts.length === 0) {
+      return clampPoints(detail.maxPoints, state?.score ?? detail.score ?? 0);
+    }
+    const sum = parts.reduce((sum, part, index) => {
+      const max = Math.max(0, Number(part.points) || 0);
+      return sum + Math.min(max, Math.max(0, Number(state?.subParts?.[index]) || 0));
+    }, 0);
+    return Math.min(detail.maxPoints, round1Safe(sum));
+  };
+
   const essayTotal = useMemo(
-    () =>
-      round1(
-        submission.essayDetails.reduce((sum, detail) => {
-          const value = scores[String(detail.questionId)]?.score ?? detail.score ?? 0;
-          return sum + Math.min(detail.maxPoints, Math.max(0, value));
-        }, 0),
-      ),
+    () => round1Safe(submission.essayDetails.reduce((sum, detail) => sum + questionScoreOf(detail), 0)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [scores, submission.essayDetails],
   );
 
@@ -62,29 +119,62 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
   const hasShortAnswers = shortAnswerDetails.length > 0;
   const finalTotal = round1((submission.autoScore || 0) + essayTotal);
 
-  const updateScore = (questionId: string | number, rawValue: string, maxPoints: number) => {
+  const updatePartScore = (questionId: string | number, partIndex: number, rawValue: string, partMax: number) => {
     const parsed = Number(rawValue);
-    const value = Number.isFinite(parsed) ? Math.min(maxPoints, Math.max(0, parsed)) : 0;
+    const value = Number.isFinite(parsed) ? clampPoints(partMax, parsed) : 0;
     setScores((current) => ({
       ...current,
-      [String(questionId)]: { score: value, comment: current[String(questionId)]?.comment || '' },
+      [String(questionId)]: {
+        ...current[String(questionId)],
+        subParts: {
+          ...current[String(questionId)]?.subParts,
+          [partIndex]: value,
+        },
+      },
+    }));
+  };
+
+  const setPartMax = (questionId: string | number, partIndex: number, partMax: number) => {
+    updatePartScore(questionId, partIndex, String(partMax), partMax);
+  };
+
+  const clearPartScore = (questionId: string | number, partIndex: number) => {
+    updatePartScore(questionId, partIndex, '0', 999999);
+  };
+
+  const updateFlatScore = (questionId: string | number, rawValue: string, maxPoints: number) => {
+    const parsed = Number(rawValue);
+    const value = Number.isFinite(parsed) ? clampPoints(maxPoints, parsed) : 0;
+    setScores((current) => ({
+      ...current,
+      [String(questionId)]: { ...current[String(questionId)], score: value },
     }));
   };
 
   const updateComment = (questionId: string | number, comment: string) => {
     setScores((current) => ({
       ...current,
-      [String(questionId)]: { score: current[String(questionId)]?.score ?? 0, comment },
+      [String(questionId)]: { ...current[String(questionId)], comment },
     }));
   };
 
   const handleSave = () => {
     const essayDetails = submission.essayDetails.map((detail) => {
-      const graded = scores[String(detail.questionId)];
+      const parts = detail.subParts ?? [];
+      const state = scores[String(detail.questionId)];
+      const subPartScores: Record<number, number> = {};
+      if (parts.length > 0) {
+        parts.forEach((part, index) => {
+          const max = Math.max(0, Number(part.points) || 0);
+          subPartScores[index] = clampPoints(max, Number(state?.subParts?.[index]) || 0);
+        });
+      }
+      const questionScore = questionScoreOf(detail);
       return {
         ...detail,
-        score: Math.min(detail.maxPoints, Math.max(0, graded?.score ?? detail.score ?? 0)),
-        comment: graded?.comment ?? detail.comment,
+        score: questionScore,
+        comment: state?.comment ?? detail.comment,
+        subPartScores,
         graded: true,
       };
     });
@@ -271,15 +361,12 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
                       </span>
                     </div>
                     <span className="text-[11px] font-bold text-slate-400">
-                      Điểm đã cho: <span className="text-emerald-600">{formatNumber(scores[String(detail.questionId)]?.score ?? 0)}đ</span>
+                      Điểm câu:{' '}
+                      <span className="text-emerald-600">
+                        {formatNumber(questionScoreOf(detail))}/{formatNumber(detail.maxPoints)}đ
+                      </span>
                     </span>
                   </div>
-
-                  {detail.questionContent ? (
-                    <p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-slate-600">
-                      {detail.questionContent}
-                    </p>
-                  ) : null}
 
                   {detail.studentImages.length > 0 ? (
                     <div className="mt-3">
@@ -309,10 +396,80 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
                     </p>
                   )}
 
-                  <div className="mt-3 grid gap-2 sm:grid-cols-[120px_1fr]">
-                    <div>
+                  {(detail.subParts && detail.subParts.length > 0) ? (
+                    <div className="mt-3 space-y-2">
+                      {detail.subParts.map((part, partIndex) => {
+                        const max = Math.max(0, Number(part.points) || 0);
+                        const value = scores[String(detail.questionId)]?.subParts?.[partIndex] ?? 0;
+                        return (
+                          <div
+                            key={partIndex}
+                            className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-2.5"
+                          >
+                            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-[11px] font-black uppercase text-emerald-700">
+                              {part.label}
+                            </span>
+                            <div className="min-w-40 flex-1">
+                              <p className="text-[11px] font-medium leading-snug text-slate-700">
+                                {part.content || '—'}
+                              </p>
+                              <p className="mt-0.5 text-[10px] font-bold text-slate-400">
+                                Tối đa {formatNumber(max)}đ
+                              </p>
+                            </div>
+                            <div className="w-24 shrink-0">
+                              <input
+                                type="number"
+                                min={0}
+                                max={max}
+                                step={0.25}
+                                value={value}
+                                onChange={(event) =>
+                                  updatePartScore(detail.questionId, partIndex, event.target.value, max)
+                                }
+                                aria-label={`Điểm ý ${part.label}`}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-emerald-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+                              />
+                            </div>
+                            <div className="flex shrink-0 gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setPartMax(detail.questionId, partIndex, max)}
+                                className="rounded-lg bg-emerald-50 px-2 py-1.5 text-[10px] font-bold text-emerald-700 transition hover:bg-emerald-100"
+                              >
+                                Tối đa
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => clearPartScore(detail.questionId, partIndex)}
+                                className="rounded-lg bg-slate-100 px-2 py-1.5 text-[10px] font-bold text-slate-500 transition hover:bg-slate-200"
+                              >
+                                0đ
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-50/70 px-3 py-2 text-[11px] font-bold text-emerald-800">
+                        <span>
+                          Tổng điểm ý tối đa:{' '}
+                          {formatNumber(
+                            detail.subParts.reduce((sum, part) => sum + Math.max(0, Number(part.points) || 0), 0),
+                          )}
+                          đ
+                        </span>
+                        <span>
+                          Câu này:{' '}
+                          <span className="text-emerald-700">
+                            {formatNumber(questionScoreOf(detail))} / {formatNumber(detail.maxPoints)}đ
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3">
                       <label className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Điểm (0 – {formatNumber(detail.maxPoints)})
+                        Điểm câu (0 – {formatNumber(detail.maxPoints)})
                       </label>
                       <input
                         type="number"
@@ -320,22 +477,23 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
                         max={detail.maxPoints}
                         step={0.25}
                         value={scores[String(detail.questionId)]?.score ?? 0}
-                        onChange={(event) => updateScore(detail.questionId, event.target.value, detail.maxPoints)}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-emerald-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+                        onChange={(event) => updateFlatScore(detail.questionId, event.target.value, detail.maxPoints)}
+                        className="w-40 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-emerald-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
-                    <div>
-                      <label className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Nhận xét
-                      </label>
-                      <input
-                        type="text"
-                        value={scores[String(detail.questionId)]?.comment ?? ''}
-                        onChange={(event) => updateComment(detail.questionId, event.target.value)}
-                        placeholder="Nhận xét bài làm của học sinh..."
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
-                      />
-                    </div>
+                  )}
+
+                  <div className="mt-3">
+                    <label className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-400">
+                      Nhận xét
+                    </label>
+                    <input
+                      type="text"
+                      value={scores[String(detail.questionId)]?.comment ?? ''}
+                      onChange={(event) => updateComment(detail.questionId, event.target.value)}
+                      placeholder="Nhận xét bài làm của học sinh..."
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+                    />
                   </div>
                 </div>
               ))}

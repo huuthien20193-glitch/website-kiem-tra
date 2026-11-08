@@ -286,3 +286,52 @@ export async function insertSubmissionToCloud(
 
   return { ok: true }
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Cập nhật một bài nộp lên Supabase (dùng khi giáo viên chấm điểm).
+ * Dùng upsert để hỗ trợ cả bài local chưa từng đẩy lên máy chủ.
+ * Bỏ qua các cột mới chưa tồn tại trên schema cũ.
+ */
+export async function updateSubmissionInCloud(
+  submission: Submission,
+): Promise<{ ok: boolean; message?: string }> {
+  const supabase = createClient()
+  if (!supabase) {
+    return { ok: false, message: 'Chưa cấu hình NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY.' }
+  }
+
+  // Bài chỉ tồn tại ở local (bị mất mạng lúc nộp) không có id uuid — chỉ lưu local là đủ.
+  if (!UUID_PATTERN.test(submission.id)) {
+    return { ok: true }
+  }
+
+  let currentRow: Record<string, unknown> = {
+    id: submission.id,
+    ...(mapSubmissionToRow(submission) as Record<string, unknown>),
+  }
+  const optionalColumns = ['short_answer_details', 'mcq_explanation_enabled', 'mcq_explanations'] as const
+
+  const first = await supabase.from('submissions').upsert(currentRow, { onConflict: 'id' })
+  let error = first.error
+  let guard = 0
+  while (error && guard < optionalColumns.length) {
+    const message = `${error.code ?? ''} ${error.message ?? ''}`
+    const missing = optionalColumns.find((column) => new RegExp(column, 'i').test(message) && column in currentRow)
+    if (!missing) break
+    const nextRow = { ...currentRow }
+    delete nextRow[missing]
+    currentRow = nextRow
+    const retry = await supabase.from('submissions').upsert(currentRow, { onConflict: 'id' })
+    error = retry.error
+    guard += 1
+  }
+
+  if (error) {
+    console.error('Không thể lưu chấm điểm lên Supabase:', errorMessage(error))
+    return { ok: false, message: errorMessage(error) }
+  }
+
+  return { ok: true }
+}

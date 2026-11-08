@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import type { Exam, Grade, Submission, TeacherTab } from '@/lib/types'
-import { clearSession, getSession, loadExams, loadSubmissions, saveExams } from '@/lib/storage'
+import { clearSession, getSession, loadExams, loadSubmissions, saveExams, saveSubmissions } from '@/lib/storage'
 import { cn, formatNumber, isPending } from '@/lib/utils'
 import { downloadCsv } from '@/lib/export'
 import { BrandLogo } from '@/components/ui/Brand'
@@ -26,6 +26,7 @@ import {
   fetchExamsFromCloud,
   fetchSubmissionsFromCloud,
   saveExamToCloud,
+  updateSubmissionInCloud,
 } from '@/lib/supabase'
 import { useConfirm, useToast } from '@/components/ui/FeedbackProvider'
 import { useIsClient } from '@/lib/hooks'
@@ -70,6 +71,7 @@ export default function TeacherDashboard() {
   }
 
   // Tải danh sách bài nộp từ Supabase.
+  // Tải bài nộp từ Supabase (dự phòng localStorage khi mất mạng).
   const fetchSubmissions = async () => {
     setSubmissionsLoading(true)
     try {
@@ -237,25 +239,22 @@ export default function TeacherDashboard() {
   }
 
   const handleSaveGrading = async (updated: Submission) => {
-    const supabase = createClient()
-    if (!supabase) return
+    // Lưu lên Supabase trước (không để lỗi mạng chặn việc chấm bài).
+    const result = await updateSubmissionInCloud(updated)
 
-    const { error } = await supabase
-      .from('submissions')
-      .update({
-        score: updated.score,
-        status: updated.status,
-        essay_details: updated.essayDetails,
-      })
-      .eq('id', updated.id)
+    // Luôn cập nhật danh sách trên máy hiện tại (dù có mạng hay mất mạng).
+    const next = submissions.map((item) => (item.id === updated.id ? updated : item))
+    saveSubmissions(next)
+    setSubmissions(next)
+    setGradingSubmission(null)
 
-    if (error) {
-      toast.error('Lỗi', 'Không thể lưu điểm.')
+    if (!result.ok) {
+      toast.warning(
+        'Chưa đồng bộ lên máy chủ',
+        'Điểm đã được lưu trên thiết bị này nhưng chưa đẩy lên máy chủ. Kiểm tra kết nối mạng rồi thử lại.',
+      )
       return
     }
-
-    setSubmissions(submissions.map((item) => (item.id === updated.id ? updated : item)))
-    setGradingSubmission(null)
     toast.success('Đã lưu điểm', `${updated.studentName}: ${formatNumber(updated.score)} điểm.`)
   }
 

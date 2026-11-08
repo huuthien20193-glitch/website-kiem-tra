@@ -191,6 +191,18 @@ export function normalizeSubmission(raw: Partial<Submission>): Submission {
         score: Math.max(0, asNumber(detail?.score, 0)),
         comment: typeof detail?.comment === 'string' ? detail.comment : '',
         graded: Boolean(detail?.graded),
+        subParts: Array.isArray(detail?.subParts)
+          ? detail.subParts.map((part, partIndex) => normalizeSubPart(part, partIndex))
+          : [],
+        subPartScores:
+          detail?.subPartScores && typeof detail.subPartScores === 'object' && !Array.isArray(detail.subPartScores)
+            ? Object.fromEntries(
+                Object.entries(detail.subPartScores as Record<string, unknown>).map(([key, value]) => [
+                  Number(key),
+                  Math.max(0, asNumber(value, 0)),
+                ]),
+              )
+            : {},
       }))
     : [];
 
@@ -414,6 +426,8 @@ export function buildSubmission(
       .map((part) => `${part.label}) ${part.content}`.trim())
       .join('  •  '),
     maxPoints: question.points,
+    subParts: question.subParts.map((part) => ({ ...part })),
+    subPartScores: {},
     studentImages: essayImages[String(question.id)] || [],
     score: 0,
     comment: '',
