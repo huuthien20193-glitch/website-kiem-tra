@@ -260,14 +260,23 @@ export async function insertSubmissionToCloud(
   }
 
   const row = mapSubmissionToRow(submission)
-  let { error } = await supabase.from('submissions').insert(row)
-
-  // Tương thích với bảng cũ chưa có cột short_answer_details.
-  if (error && /short_answer_details/i.test(`${error.code ?? ''} ${error.message ?? ''}`)) {
-    const { short_answer_details: _omit, ...fallback } = row
-    void _omit
-    const retry = await supabase.from('submissions').insert(fallback)
+  let currentRow: Record<string, unknown> = { ...(row as Record<string, unknown>) }
+  // Bảng cũ có thể chưa có các cột mới (short_answer_details / mcq_explanation_*).
+  // Thử bỏ dần từng cột bị thiếu trong thông báo lỗi cho tới khi insert thành công.
+  const optionalColumns = ['short_answer_details', 'mcq_explanation_enabled', 'mcq_explanations'] as const
+  const first = await supabase.from('submissions').insert(currentRow)
+  let error = first.error
+  let guard = 0
+  while (error && guard < optionalColumns.length) {
+    const message = `${error.code ?? ''} ${error.message ?? ''}`
+    const missing = optionalColumns.find((column) => new RegExp(column, 'i').test(message) && column in currentRow)
+    if (!missing) break
+    const nextRow = { ...currentRow }
+    delete nextRow[missing]
+    currentRow = nextRow
+    const retry = await supabase.from('submissions').insert(currentRow)
     error = retry.error
+    guard += 1
   }
 
   if (error) {
