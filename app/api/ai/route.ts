@@ -7,7 +7,7 @@ import { NextRequest } from 'next/server';
 
 const DEFAULT_MODELS = [
   'gemini-3.5-flash-lite',
-  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
   'gemini-2.0-flash',
 ];
 
@@ -142,7 +142,7 @@ async function callGemini(parts: GeminiPart[], systemInstruction: string, useJso
             { status: 401 },
           );
         }
-        if (/not found|not supported|unsupported|invalid model|does not exist/i.test(raw)) {
+        if (/not found|not supported|unsupported|invalid model|does not exist|no longer available|not_found|deprecated/i.test(raw)) {
           lastError = new Error(`Model ${model} không khả dụng`);
           continue;
         }
@@ -187,20 +187,35 @@ async function callGemini(parts: GeminiPart[], systemInstruction: string, useJso
   throw lastError ?? new Error('Không gọi được Gemini.');
 }
 
-/** Bóc chuỗi JSON từ câu trả lời (loại bỏ ```json fence nếu có). */
+/** Bóc chuỗi JSON từ câu trả lời (loại bỏ ```json fence nếu có, tự vá lỗi nhẹ của model). */
 function extractJson<T>(text: string): T {
   const cleaned = text
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/, '')
     .trim();
+  const attempts = [cleaned];
+  // Vá các lỗi JSON thường gặp của model: dấu phẩy thừa trước } hoặc ]
+  attempts.push(cleaned.replace(/,\s*([}\]])/g, '$1'));
   try {
-    return JSON.parse(cleaned) as T;
-  } catch {
+    for (const attempt of attempts) {
+      try {
+        return JSON.parse(attempt) as T;
+      } catch {
+        // Thử cách vá kế tiếp.
+      }
+    }
     const start = cleaned.search(/[[{]/);
     const end = Math.max(cleaned.lastIndexOf('}'), cleaned.lastIndexOf(']'));
     if (start >= 0 && end > start) {
-      return JSON.parse(cleaned.slice(start, end + 1)) as T;
+      const sliced = cleaned.slice(start, end + 1);
+      try {
+        return JSON.parse(sliced) as T;
+      } catch {
+        return JSON.parse(sliced.replace(/,\s*([}\]])/g, '$1')) as T;
+      }
     }
+    throw new Error('Phản hồi của AI không đúng định dạng JSON.');
+  } catch {
     throw new Error('Phản hồi của AI không đúng định dạng JSON.');
   }
 }
@@ -395,14 +410,26 @@ export async function POST(request: NextRequest) {
         .filter(Boolean)
         .join('\n');
 
-      const raw = await callGemini(
-        [...documentSection(documents), { text: requestText }],
-        buildExamSystemPrompt(),
-        true,
-        110_000,
-        body.apiKey,
-      );
-      const draft = extractJson<Record<string, unknown>>(raw);
+      // Model đôi khi trả JSON lệch nhẹ — thử tối đa 2 lần.
+      let draft: Record<string, unknown> | null = null;
+      let lastParseError: Error | null = null;
+      for (let attempt = 0; attempt < 2 && !draft; attempt += 1) {
+        const raw = await callGemini(
+          [...documentSection(documents), { text: requestText }],
+          buildExamSystemPrompt(),
+          true,
+          110_000,
+          body.apiKey,
+        );
+        try {
+          draft = extractJson<Record<string, unknown>>(raw);
+        } catch (parseError) {
+          lastParseError = parseError instanceof Error ? parseError : new Error(String(parseError));
+        }
+      }
+      if (!draft) {
+        throw lastParseError ?? new Error('AI không trả về đề hợp lệ.');
+      }
       return Response.json({ ok: true, draft });
     }
 
