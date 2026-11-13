@@ -121,6 +121,12 @@ async function callGemini(parts: GeminiPart[], systemInstruction: string, useJso
 
       if (response.status === 404 || response.status === 400) {
         const raw = await response.text();
+        if (/API_KEY_INVALID|API key not valid/i.test(raw)) {
+          throw Object.assign(
+            new Error('API key Gemini KHÔNG HỢP LỆ. Giá trị biến GEMINI_API_KEY trên server bị sai hoặc thiếu ký tự — hãy dán lại key đầy đủ rồi redeploy.'),
+            { status: 401 },
+          );
+        }
         if (/not found|not supported|unsupported|invalid model|does not exist/i.test(raw)) {
           lastError = new Error(`Model ${model} không khả dụng`);
           continue;
@@ -244,7 +250,28 @@ const TEACHER_SYSTEM = [
 /* ------------------------------ Route ------------------------------ */
 
 export async function GET() {
-  return Response.json({ ok: true, configured: Boolean(apiKey()), model: modelList()[0] });
+  const key = apiKey();
+  const payload: { ok: boolean; configured: boolean; keyValid?: boolean | null; model: string } = {
+    ok: true,
+    configured: Boolean(key),
+    model: modelList()[0],
+  };
+  if (key) {
+    // Kiểm tra nhanh key có thực sự dùng được không (đặt sai/missing ký tự rất dễ xảy ra).
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      const response = await fetch(`${API_BASE}?pageSize=1`, {
+        headers: { 'x-goog-api-key': key },
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      payload.keyValid = response.ok ? true : /API_KEY_INVALID|API key not valid/i.test(await response.text()) ? false : null;
+    } catch {
+      payload.keyValid = null; // không kết luận được (mạng/timeout)
+    }
+  }
+  return Response.json(payload);
 }
 
 export async function POST(request: NextRequest) {

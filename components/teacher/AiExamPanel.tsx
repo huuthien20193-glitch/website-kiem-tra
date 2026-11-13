@@ -32,6 +32,7 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+  const [keyValid, setKeyValid] = useState<boolean | null>(null);
   /** null = chưa chọn gì, dùng mặc định (2 tài liệu đầu). */
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [subject, setSubject] = useState(defaults.subject);
@@ -45,7 +46,10 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void aiStatus().then((status) => setAiConfigured(status.configured));
+    void aiStatus().then((status) => {
+      setAiConfigured(status.configured);
+      setKeyValid(status.keyValid ?? null);
+    });
   }, []);
 
   const defaultSelection = () => new Set(documents.slice(0, 2).map((document) => document.id));
@@ -116,7 +120,9 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
     }
   };
 
-  if (aiConfigured === false) {
+  const notConfigured = aiConfigured === false || (aiConfigured === true && keyValid === false);
+
+  if (notConfigured) {
     return (
       <div className="flex items-start gap-3 rounded-3xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-sm">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
@@ -125,17 +131,25 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
         <div className="text-xs font-semibold text-amber-800">
           <p className="text-sm font-black text-amber-900">AI soạn đề</p>
           <p className="mt-1">
-            Chưa cấu hình API key. Tạo key miễn phí tại{' '}
-            <a
-              href="https://aistudio.google.com/apikey"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              aistudio.google.com/apikey
-            </a>
-            , rồi thêm <code className="rounded bg-amber-100 px-1 py-0.5 font-mono">GEMINI_API_KEY=...</code> vào{' '}
-            <code className="rounded bg-amber-100 px-1 py-0.5 font-mono">.env.local</code> và khởi động lại server.
+            {keyValid === false
+              ? 'API key Gemini trên server KHÔNG HỢP LỆ (đặt sai hoặc thiếu ký tự). Kiểm tra lại biến GEMINI_API_KEY trên máy chủ rồi redeploy.'
+              : 'Chưa cấu hình API key. Tạo key miễn phí tại '}
+            {keyValid === false ? null : (
+              <a
+                href="https://aistudio.google.com/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                aistudio.google.com/apikey
+              </a>
+            )}
+            {keyValid === false ? null : (
+              <>
+                , rồi thêm <code className="rounded bg-amber-100 px-1 py-0.5 font-mono">GEMINI_API_KEY=...</code> vào{' '}
+                <code className="rounded bg-amber-100 px-1 py-0.5 font-mono">.env.local</code> và khởi động lại server.
+              </>
+            )}
           </p>
         </div>
       </div>

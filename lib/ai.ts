@@ -32,11 +32,11 @@ async function post<T>(body: unknown): Promise<T> {
   return data as T;
 }
 
-export async function aiStatus(): Promise<{ configured: boolean; model?: string }> {
+export async function aiStatus(): Promise<{ configured: boolean; keyValid?: boolean | null; model?: string }> {
   try {
     const response = await fetch('/api/ai');
-    const data = (await response.json()) as { configured?: boolean; model?: string };
-    return { configured: Boolean(data.configured), model: data.model };
+    const data = (await response.json()) as { configured?: boolean; keyValid?: boolean | null; model?: string };
+    return { configured: Boolean(data.configured), keyValid: data.keyValid, model: data.model };
   } catch {
     return { configured: false };
   }
