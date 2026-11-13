@@ -47,6 +47,15 @@ async function extractDocx(file: File): Promise<string> {
 /** Đọc PDF bằng pdf-parse bản web; trả về chữ + (khi scan) ảnh trang đầu. */
 async function extractPdf(file: File): Promise<ExtractResult> {
   const { PDFParse } = await import('pdf-parse');
+
+  // pdf.js trong trình duyệt cần Web Worker cùng origin. Bản web của pdf-parse
+  // không tự cấu hình worker, nên chỉ định file được copy vào public/ lúc build
+  // (scripts/copy-pdf-worker.mjs). Thiếu bước này getText() sẽ luôn lỗi
+  // "No GlobalWorkerOptions.workerSrc specified" và mọi PDF bị coi là scan.
+  if (typeof window !== 'undefined') {
+    PDFParse.setWorker('/pdf.worker.mjs');
+  }
+
   const data = new Uint8Array(await file.arrayBuffer());
   const parser = new PDFParse({ data });
 
