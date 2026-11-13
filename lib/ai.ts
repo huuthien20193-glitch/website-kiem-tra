@@ -19,11 +19,69 @@ export function aiPayloadFromDocument(document: TeacherDocument): AiDocumentPayl
   };
 }
 
+/** Ô lưu API key Gemini trên trình duyệt giáo viên (không lưu ở server). */
+const AI_KEY_STORAGE = 'thtedu:gemini_api_key';
+
+export function getLocalAiKey(): string {
+  if (typeof window === 'undefined') return '';
+  return (window.localStorage.getItem(AI_KEY_STORAGE) || '').trim();
+}
+
+export function setLocalAiKey(key: string): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(AI_KEY_STORAGE, key.trim());
+}
+
+export function clearLocalAiKey(): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(AI_KEY_STORAGE);
+}
+
+/** Kiểm tra một key (giáo viên nhập hoặc key server) có dùng được không. */
+export async function validateAiKey(key: string): Promise<boolean> {
+  try {
+    const response = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'validate-key', apiKey: key.trim() }),
+    });
+    const data = (await response.json().catch(() => ({}))) as { valid?: boolean };
+    return Boolean(data.valid);
+  } catch {
+    return false;
+  }
+}
+
+export type AiReadiness = { ready: boolean; reason: 'missing' | 'invalid' | null };
+
+/** AI sẵn sàng chưa? Ưu tiên key giáo viên lưu trên máy, sau đó đến key server. */
+export async function aiReadiness(): Promise<AiReadiness> {
+  const local = getLocalAiKey();
+  if (local) {
+    const valid = await validateAiKey(local);
+    if (valid) return { ready: true, reason: null };
+  }
+  try {
+    const response = await fetch('/api/ai');
+    const status = (await response.json()) as { configured?: boolean; keyValid?: boolean | null };
+    if (status.configured && status.keyValid !== false) return { ready: true, reason: null };
+    return { ready: false, reason: status.configured ? 'invalid' : 'missing' };
+  } catch {
+    return { ready: false, reason: 'missing' };
+  }
+}
+
 async function post<T>(body: unknown): Promise<T> {
+  // Gắn key Gemini giáo viên lưu trên máy (nếu có) vào mọi request AI.
+  const localKey = getLocalAiKey();
+  const payload =
+    typeof body === 'object' && body !== null
+      ? { apiKey: localKey || undefined, ...body }
+      : body;
   const response = await fetch('/api/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok || data.ok !== true) {

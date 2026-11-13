@@ -26,6 +26,17 @@ function apiKey(): string {
   return PLACEHOLDER_KEYS.has(key.toLowerCase()) ? '' : key;
 }
 
+/** Key hợp lệ khi dùng cho request này: key giáo viên gửi theo request (ưu tiên) hoặc key server. */
+function apiKeyForRequest(supplied: unknown): string {
+  if (typeof supplied === 'string') {
+    const candidate = supplied.trim();
+    if (candidate.length >= 20 && !/\s/.test(candidate) && !PLACEHOLDER_KEYS.has(candidate.toLowerCase())) {
+      return candidate;
+    }
+  }
+  return apiKey();
+}
+
 function modelList(): string[] {
   const custom = (process.env.GEMINI_MODEL || '').trim();
   return custom ? [custom, ...DEFAULT_MODELS] : DEFAULT_MODELS;
@@ -45,7 +56,8 @@ type AiDocument = {
 };
 
 type GenerateBody = {
-  action: 'summarize' | 'chat' | 'generate-exam';
+  action: 'summarize' | 'chat' | 'generate-exam' | 'validate-key';
+  apiKey?: string;
   documents?: AiDocument[];
   document?: AiDocument;
   messages?: ChatMessage[];
@@ -90,10 +102,13 @@ function partsFromDocument(document: AiDocument, index: number): GeminiPart[] {
 }
 
 /** Gọi Gemini, thử lần lượt các model khi model không tồn tại. */
-async function callGemini(parts: GeminiPart[], systemInstruction: string, useJson: boolean, timeoutMs = 110_000): Promise<string> {
-  const key = apiKey();
+async function callGemini(parts: GeminiPart[], systemInstruction: string, useJson: boolean, timeoutMs = 110_000, suppliedKey?: string): Promise<string> {
+  const key = apiKeyForRequest(suppliedKey);
   if (!key) {
-    throw Object.assign(new Error('MISSING_API_KEY'), { status: 400 });
+    throw Object.assign(
+      new Error('Chưa có API key Gemini. Dán key vào ô "API key Gemini" trong phần AI, hoặc đặt GEMINI_API_KEY trên server.'),
+      { status: 400 },
+    );
   }
 
   const body = {
@@ -123,7 +138,7 @@ async function callGemini(parts: GeminiPart[], systemInstruction: string, useJso
         const raw = await response.text();
         if (/API_KEY_INVALID|API key not valid/i.test(raw)) {
           throw Object.assign(
-            new Error('API key Gemini KHÔNG HỢP LỆ. Giá trị biến GEMINI_API_KEY trên server bị sai hoặc thiếu ký tự — hãy dán lại key đầy đủ rồi redeploy.'),
+            new Error('API key Gemini KHÔNG HỢP LỆ. Hãy dán lại key đầy đủ vào ô "API key Gemini" trong phần AI (hoặc sửa GEMINI_API_KEY trên server).'),
             { status: 401 },
           );
         }
@@ -275,23 +290,45 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  if (!apiKey()) {
-    return Response.json(
-      {
-        ok: false,
-        error: 'missing-key',
-        message:
-          'Chưa cấu hình GEMINI_API_KEY. Hãy thêm GEMINI_API_KEY vào file .env.local (lấy miễn phí tại https://aistudio.google.com/apikey) rồi khởi động lại server.',
-      },
-      { status: 400 },
-    );
-  }
-
   let body: GenerateBody;
   try {
     body = (await request.json()) as GenerateBody;
   } catch {
     return Response.json({ ok: false, message: 'Dữ liệu gửi lên không hợp lệ.' }, { status: 400 });
+  }
+
+  // Action riêng: kiểm tra một API key (key giáo viên gửi theo request, không lưu lại ở server).
+  if (body.action === 'validate-key') {
+    const candidate = apiKeyForRequest(body.apiKey);
+    if (!candidate) {
+      return Response.json({ ok: true, valid: false, reason: 'empty' });
+    }
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10_000);
+      const check = await fetch(`${API_BASE}?pageSize=1`, {
+        headers: { 'x-goog-api-key': candidate },
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      const raw = check.ok ? '' : await check.text();
+      const valid = check.ok || !/API_KEY_INVALID|API key not valid/i.test(raw);
+      return Response.json({ ok: true, valid, status: check.status });
+    } catch {
+      return Response.json({ ok: true, valid: null, reason: 'network' });
+    }
+  }
+
+  if (!apiKeyForRequest(body.apiKey)) {
+    return Response.json(
+      {
+        ok: false,
+        error: 'missing-key',
+        message:
+          'Chưa có API key Gemini. Dán key vào ô "API key Gemini" trong phần AI (lấy miễn phí tại https://aistudio.google.com/apikey), hoặc đặt GEMINI_API_KEY trên server.',
+      },
+      { status: 400 },
+    );
   }
 
   try {
@@ -304,6 +341,8 @@ export async function POST(request: NextRequest) {
         partsFromDocument(document, 0),
         TEACHER_SYSTEM,
         false,
+        110_000,
+        body.apiKey,
       );
       return Response.json({ ok: true, summary: text });
     }
@@ -320,7 +359,7 @@ export async function POST(request: NextRequest) {
       parts.push({ text: `LỊCH SỬ HỘI THOẠI:\n${messages
         .map((message) => `${message.role === 'user' ? 'Giáo viên' : 'Trợ lý'}: ${message.content}`)
         .join('\n')}\n\nTrả lời câu hỏi MỚI NHẤT của giáo viên ở trên.` });
-      const text = await callGemini(parts, TEACHER_SYSTEM, false);
+      const text = await callGemini(parts, TEACHER_SYSTEM, false, 110_000, body.apiKey);
       return Response.json({ ok: true, reply: text });
     }
 
@@ -360,6 +399,8 @@ export async function POST(request: NextRequest) {
         [...documentSection(documents), { text: requestText }],
         buildExamSystemPrompt(),
         true,
+        110_000,
+        body.apiKey,
       );
       const draft = extractJson<Record<string, unknown>>(raw);
       return Response.json({ ok: true, draft });

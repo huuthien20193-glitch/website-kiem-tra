@@ -8,10 +8,11 @@ import { cn } from '@/lib/utils';
 import {
   aiGenerateExam,
   aiPayloadFromDocument,
-  aiStatus,
+  aiReadiness,
   type AiExamDraft,
   type AiExamOptions,
 } from '@/lib/ai';
+import { AiKeyBanner } from './AiKeyBanner';
 import { useToast } from '@/components/ui/FeedbackProvider';
 
 type AiExamPanelProps = {
@@ -46,9 +47,9 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void aiStatus().then((status) => {
-      setAiConfigured(status.configured);
-      setKeyValid(status.keyValid ?? null);
+    void aiReadiness().then((readiness) => {
+      setAiConfigured(readiness.ready);
+      setKeyValid(readiness.reason === 'invalid' ? false : readiness.ready ? true : null);
     });
   }, []);
 
@@ -124,34 +125,24 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
 
   if (notConfigured) {
     return (
-      <div className="flex items-start gap-3 rounded-3xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-sm">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-          <Sparkles className="size-5" />
-        </span>
-        <div className="text-xs font-semibold text-amber-800">
-          <p className="text-sm font-black text-amber-900">AI soạn đề</p>
-          <p className="mt-1">
-            {keyValid === false
-              ? 'API key Gemini trên server KHÔNG HỢP LỆ (đặt sai hoặc thiếu ký tự). Kiểm tra lại biến GEMINI_API_KEY trên máy chủ rồi redeploy.'
-              : 'Chưa cấu hình API key. Tạo key miễn phí tại '}
-            {keyValid === false ? null : (
-              <a
-                href="https://aistudio.google.com/apikey"
-                target="_blank"
-                rel="noreferrer"
-                className="underline"
-              >
-                aistudio.google.com/apikey
-              </a>
-            )}
-            {keyValid === false ? null : (
-              <>
-                , rồi thêm <code className="rounded bg-amber-100 px-1 py-0.5 font-mono">GEMINI_API_KEY=...</code> vào{' '}
-                <code className="rounded bg-amber-100 px-1 py-0.5 font-mono">.env.local</code> và khởi động lại server.
-              </>
-            )}
-          </p>
+      <div className="space-y-3 rounded-3xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+            <Sparkles className="size-5" />
+          </span>
+          <div className="text-xs font-semibold text-amber-800">
+            <p className="text-sm font-black text-amber-900">AI soạn đề</p>
+            <p className="mt-1">
+              {keyValid === false
+                ? 'API key Gemini trên máy chủ không hợp lệ. Dán key của bạn vào ô dưới đây để dùng ngay.'
+                : 'Dán API key Gemini của bạn vào ô dưới đây (miễn phí, lấy tại aistudio.google.com/apikey).'}
+            </p>
+          </div>
         </div>
+        <AiKeyBanner reason={keyValid === false ? 'invalid' : 'missing'} onSaved={() => {
+          setAiConfigured(true);
+          setKeyValid(true);
+        }} />
       </div>
     );
   }

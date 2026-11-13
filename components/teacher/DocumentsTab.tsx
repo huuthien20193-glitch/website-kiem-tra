@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
   BookOpen,
   Bot,
-  CircleAlert,
   Eye,
   FileText,
   FileUp,
@@ -19,11 +18,12 @@ import { cn, formatNumber } from '@/lib/utils';
 import { extractDocumentContent, FILE_KIND_LABELS, formatFileSize } from '@/lib/documents';
 import {
   aiPayloadFromDocument,
-  aiStatus,
+  aiReadiness,
   aiSummarizeDocument,
   aiChat,
   type ChatEntry,
 } from '@/lib/ai';
+import { AiKeyBanner } from './AiKeyBanner';
 import { createClient, deleteDocumentFromCloud, saveDocumentToCloud } from '@/lib/supabase';
 import { useConfirm, useToast } from '@/components/ui/FeedbackProvider';
 
@@ -51,6 +51,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+  const [keyValid, setKeyValid] = useState<boolean | null>(null);
 
   // Trợ lý AI hỏi đáp theo tài liệu
   /** null = dùng mặc định (tất cả tài liệu). */
@@ -61,7 +62,10 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    void aiStatus().then((status) => setAiConfigured(status.configured));
+    void aiReadiness().then((readiness) => {
+      setAiConfigured(readiness.ready);
+      setKeyValid(readiness.reason === 'invalid' ? false : readiness.ready ? true : null);
+    });
   }, []);
 
   const effectiveChatDocs = chatDocs ?? new Set(documents.map((document) => document.id));
@@ -202,23 +206,14 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
         </div>
       </header>
 
-      {aiConfigured === false ? (
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
-          <CircleAlert className="mt-0.5 size-4 shrink-0" />
-          <span>
-            Chưa cấu hình AI. Hãy tạo API key miễn phí tại{' '}
-            <a
-              href="https://aistudio.google.com/apikey"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              aistudio.google.com/apikey
-            </a>{' '}
-            rồi thêm dòng <code className="rounded bg-amber-100 px-1 py-0.5 font-mono">GEMINI_API_KEY=...</code> vào file{' '}
-            <code className="rounded bg-amber-100 px-1 py-0.5 font-mono">.env.local</code> và khởi động lại server.
-          </span>
-        </div>
+      {aiConfigured === false || (aiConfigured === true && keyValid === false) ? (
+        <AiKeyBanner
+          reason={keyValid === false ? 'invalid' : 'missing'}
+          onSaved={() => {
+            setAiConfigured(true);
+            setKeyValid(true);
+          }}
+        />
       ) : null}
 
       {/* Khu tải tài liệu lên */}
