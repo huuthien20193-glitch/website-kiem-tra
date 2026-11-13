@@ -1,5 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
-import type { Exam, Submission } from './types'
+import type { Exam, Submission, TeacherDocument } from './types'
 import { normalizeExam, normalizeSubmission } from './storage'
 
 export function createClient() {
@@ -143,6 +143,101 @@ export async function deleteExamFromCloud(id: string): Promise<{ ok: boolean; me
   return { ok: true }
 }
 
+/* ------------------------------ Tài liệu (documents) ------------------------------ */
+
+export type DocumentRow = {
+  id: string
+  title?: string | null
+  file_name?: string | null
+  file_type?: string | null
+  file_size?: number | null
+  content?: string | null
+  image_data?: string | null
+  pdf_data?: string | null
+  summary?: string | null
+  created_at?: string | null
+}
+
+export function mapRowToDocument(row: DocumentRow): TeacherDocument {
+  const rawType = row.file_type
+  const fileType =
+    rawType === 'pdf' || rawType === 'docx' || rawType === 'image' ? rawType : 'text'
+  return {
+    id: String(row.id),
+    title: row.title || 'Tài liệu chưa đặt tên',
+    fileName: row.file_name ?? '',
+    fileType,
+    fileSize: row.file_size ?? 0,
+    content: row.content ?? '',
+    imageData: row.image_data ?? undefined,
+    pdfData: row.pdf_data ?? undefined,
+    summary: row.summary ?? undefined,
+    createdAt: row.created_at ?? undefined,
+  }
+}
+
+function documentToRow(document: TeacherDocument) {
+  return {
+    id: document.id,
+    title: document.title,
+    file_name: document.fileName,
+    file_type: document.fileType,
+    file_size: document.fileSize,
+    content: document.content,
+    image_data: document.imageData ?? null,
+    pdf_data: document.pdfData ?? null,
+    summary: document.summary ?? null,
+    created_at: document.createdAt ?? new Date().toISOString(),
+  }
+}
+
+export async function fetchDocumentsFromCloud(): Promise<TeacherDocument[] | null> {
+  const supabase = createClient()
+  if (!supabase) return null
+
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Không thể tải tài liệu từ Supabase:', errorMessage(error))
+    return null
+  }
+
+  return (data ?? []).map((row) => mapRowToDocument(row as DocumentRow))
+}
+
+export async function saveDocumentToCloud(
+  document: TeacherDocument,
+): Promise<{ ok: boolean; message?: string }> {
+  const supabase = createClient()
+  if (!supabase) {
+    return { ok: false, message: 'Chưa cấu hình NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY.' }
+  }
+
+  const { error } = await supabase.from('documents').upsert(documentToRow(document), { onConflict: 'id' })
+  if (error) {
+    console.error('Không thể lưu tài liệu lên Supabase:', errorMessage(error))
+    return { ok: false, message: errorMessage(error) }
+  }
+  return { ok: true }
+}
+
+export async function deleteDocumentFromCloud(id: string): Promise<{ ok: boolean; message?: string }> {
+  const supabase = createClient()
+  if (!supabase) {
+    return { ok: false, message: 'Chưa cấu hình NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY.' }
+  }
+
+  const { error } = await supabase.from('documents').delete().eq('id', id)
+  if (error) {
+    console.error('Không thể xóa tài liệu trên Supabase:', errorMessage(error))
+    return { ok: false, message: errorMessage(error) }
+  }
+  return { ok: true }
+}
+
 /* ------------------------------ Bài nộp (submissions) ------------------------------ */
 
 export type SubmissionRow = {
@@ -159,6 +254,7 @@ export type SubmissionRow = {
   student_mcq_answers: Record<number, number> | number[]
   correct_mcq_answers: number[]
   mcq_images: string[] | null
+  mcq_questions?: unknown[] | null
   mcq_explanation_enabled?: boolean | null
   mcq_explanations?: unknown[] | null
   short_answer_details?: unknown[] | null
@@ -182,6 +278,7 @@ export function mapSubmissionToRow(submission: Submission) {
     student_mcq_answers: submission.studentMcqAnswers,
     correct_mcq_answers: submission.correctMcqAnswers,
     mcq_images: submission.mcqImages,
+    mcq_questions: submission.mcqQuestions ?? [],
     mcq_explanation_enabled: submission.mcqExplanationEnabled === true,
     mcq_explanations: submission.mcqExplanations ?? [],
     short_answer_details: submission.shortAnswerDetails,
@@ -206,6 +303,7 @@ export function mapRowToSubmission(row: SubmissionRow): Submission {
     studentMcqAnswers: row.student_mcq_answers as Record<number, number>,
     correctMcqAnswers: row.correct_mcq_answers,
     mcqImages: row.mcq_images ?? [],
+    mcqQuestions: (row.mcq_questions ?? []) as Submission['mcqQuestions'],
     mcqExplanationEnabled: row.mcq_explanation_enabled === true,
     mcqExplanations: (row.mcq_explanations ?? []) as Submission['mcqExplanations'],
     shortAnswerDetails: (row.short_answer_details ?? []) as Submission['shortAnswerDetails'],
@@ -263,7 +361,7 @@ export async function insertSubmissionToCloud(
   let currentRow: Record<string, unknown> = { ...(row as Record<string, unknown>) }
   // Bảng cũ có thể chưa có các cột mới (short_answer_details / mcq_explanation_*).
   // Thử bỏ dần từng cột bị thiếu trong thông báo lỗi cho tới khi insert thành công.
-  const optionalColumns = ['short_answer_details', 'mcq_explanation_enabled', 'mcq_explanations'] as const
+  const optionalColumns = ['short_answer_details', 'mcq_questions', 'mcq_explanation_enabled', 'mcq_explanations'] as const
   const first = await supabase.from('submissions').insert(currentRow)
   let error = first.error
   let guard = 0
@@ -311,7 +409,7 @@ export async function updateSubmissionInCloud(
     id: submission.id,
     ...(mapSubmissionToRow(submission) as Record<string, unknown>),
   }
-  const optionalColumns = ['short_answer_details', 'mcq_explanation_enabled', 'mcq_explanations'] as const
+  const optionalColumns = ['short_answer_details', 'mcq_questions', 'mcq_explanation_enabled', 'mcq_explanations'] as const
 
   const first = await supabase.from('submissions').upsert(currentRow, { onConflict: 'id' })
   let error = first.error

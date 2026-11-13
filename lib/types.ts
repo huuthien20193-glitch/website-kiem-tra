@@ -15,6 +15,18 @@ export type EssayQuestion = {
   rubric?: string;
 };
 
+/**
+ * Câu trắc nghiệm dạng văn bản (AI hoặc giáo viên soạn trực tiếp trên web).
+ * Đáp án đúng vẫn được quản lý bằng `mcqAnswers` theo vị trí của câu.
+ */
+export type McqQuestion = {
+  content: string;
+  /** 4 phương án A/B/C/D. */
+  options: string[];
+  /** Ảnh minh họa của câu hỏi (tùy chọn, data URL). */
+  image?: string;
+};
+
 /** Lời giải một câu trắc nghiệm: text và/hoặc ảnh, giáo viên soạn khi tạo đề. */
 export type McqExplanation = {
   text: string;
@@ -51,6 +63,8 @@ export type Exam = {
   mcqCount: number;
   mcqPointPerQ: number;
   mcqAnswers: number[];
+  /** Nội dung câu hỏi trắc nghiệm dạng văn bản (theo index, có thể null với câu chỉ có ảnh). */
+  mcqQuestions?: (McqQuestion | null)[];
   /** Bật để học sinh xem lời giải sau khi nộp bài. */
   mcqExplanationEnabled?: boolean;
   mcqExplanations?: McqExplanation[];
@@ -102,6 +116,8 @@ export type Submission = {
   studentMcqAnswers: Record<number, number>;
   correctMcqAnswers: number[];
   mcqImages: string[];
+  /** Bản chụp nội dung câu trắc nghiệm văn bản của đề lúc nộp, để trang kết quả hiển thị được. */
+  mcqQuestions?: (McqQuestion | null)[];
   /** Bản chụp lời giải của đề lúc nộp, để trang kết quả hiện được mà không cần tải lại đề. */
   mcqExplanationEnabled?: boolean;
   mcqExplanations?: McqExplanation[];
@@ -112,7 +128,26 @@ export type Submission = {
   timeSpentSeconds?: number;
 };
 
-export type TeacherTab = 'overview' | 'exams' | 'create-exam' | 'submissions';
+export type TeacherTab = 'overview' | 'documents' | 'exams' | 'create-exam' | 'submissions';
+
+/** Tài liệu học tập giáo viên tải lên để AI đọc và soạn đề. */
+export type TeacherDocument = {
+  id: string;
+  title: string;
+  fileName: string;
+  /** pdf | docx | text | image */
+  fileType: 'pdf' | 'docx' | 'text' | 'image';
+  fileSize: number;
+  /** Nội dung văn bản đã trích xuất ('' với ảnh hoặc PDF scan). */
+  content: string;
+  /** Ảnh đã nén (data URL) — dùng cho tài liệu dạng ảnh. */
+  imageData?: string;
+  /** PDF gốc dạng base64 khi PDF scan không trích xuất được chữ. */
+  pdfData?: string;
+  /** Tóm tắt do AI tạo (tùy chọn). */
+  summary?: string;
+  createdAt?: string;
+};
 
 export const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 

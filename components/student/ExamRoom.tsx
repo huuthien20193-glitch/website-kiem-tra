@@ -52,6 +52,8 @@ export function ExamRoom({
   const confirm = useConfirm();
   const draftKey = useMemo(() => examDraftKey(exam.id, studentName), [exam.id, studentName]);
   const totalSeconds = exam.durationMinutes * 60;
+  /** Đề có câu trắc nghiệm dạng văn bản (không cần ảnh đề). */
+  const hasTextMcq = (exam.mcqQuestions ?? []).some(Boolean);
 
   // Read any saved draft once, on mount, so the first render already shows restored work.
   const [restored] = useState(() => {
@@ -428,7 +430,7 @@ export function ExamRoom({
                     </button>
                   ))}
                 </div>
-              ) : (
+              ) : hasTextMcq ? null : (
                 <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] font-semibold text-amber-800">
                   <CircleAlert className="mt-0.5 size-4 shrink-0" />
                   Giáo viên chưa đính kèm ảnh đề trắc nghiệm. Hãy làm theo đề được phát và điền đáp án bên dưới.
@@ -455,6 +457,38 @@ export function ExamRoom({
                           {formatNumber(exam.mcqPointPerQ)}đ
                         </span>
                       </div>
+                      {(() => {
+                        const textQuestion = exam.mcqQuestions?.[questionIndex];
+                        if (!textQuestion) return null;
+                        const options = textQuestion.options.filter((option) => option.trim());
+                        return (
+                          <div className="mb-2 rounded-xl bg-white p-2.5 ring-1 ring-slate-100">
+                            <p className="whitespace-pre-wrap text-xs font-semibold leading-relaxed text-slate-800">
+                              {textQuestion.content.trim() || '(Đề bài trong ảnh)'}
+                            </p>
+                            {textQuestion.image ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={textQuestion.image}
+                                alt={`Minh họa câu ${questionIndex + 1}`}
+                                className="mt-2 max-h-48 rounded-lg object-contain ring-1 ring-slate-100"
+                              />
+                            ) : null}
+                            {options.length > 0 ? (
+                              <div className="mt-2 space-y-1">
+                                {textQuestion.options.map((option, optionIndex) =>
+                                  option.trim() ? (
+                                    <p key={optionIndex} className="text-[11px] leading-snug text-slate-600">
+                                      <span className="font-black text-slate-700">{OPTION_LABELS[optionIndex]}.</span>{' '}
+                                      {option}
+                                    </p>
+                                  ) : null,
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })()}
                       <div className="grid grid-cols-4 gap-1.5">
                         {OPTION_LABELS.map((label, optionIndex) => {
                           const selected = mcqAnswers[questionIndex] === optionIndex;

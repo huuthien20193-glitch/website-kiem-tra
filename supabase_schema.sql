@@ -95,6 +95,34 @@ create policy "Allow all access" on exams
   using (true)
   with check (true);
 
+-- ---------------------------------------------------------------------
+-- 3. TÀI LIỆU GIÁO VIÊN (documents)
+-- Tài liệu cho AI đọc và soạn đề: nội dung văn bản đã trích xuất
+-- + ảnh/PDF scan (base64) để AI đọc bằng đa phương thức.
+-- ---------------------------------------------------------------------
+create table if not exists documents (
+  id text primary key,
+  title text not null,
+  file_name text,
+  file_type text default 'text',
+  file_size integer default 0,
+  content text default '',
+  image_data text,
+  pdf_data text,
+  summary text,
+  created_at timestamptz default now()
+);
+
+alter table documents enable row level security;
+drop policy if exists "Allow all access" on documents;
+create policy "Allow all access" on documents
+  for all
+  using (true)
+  with check (true);
+
+-- Cột mcq_questions (jsonb) chụp nội dung câu trắc nghiệm văn bản khi học sinh nộp bài.
+alter table submissions add column if not exists mcq_questions jsonb default '[]'::jsonb;
+
 -- =====================================================================
 -- XONG. Sau khi chạy, tải lại trang web và tạo đề mới để kiểm tra.
 -- =====================================================================

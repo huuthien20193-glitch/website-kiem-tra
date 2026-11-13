@@ -181,6 +181,14 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                       </div>
                     </div>
 
+                    {submission.mcqQuestions?.[index] ? (
+                      <div className="mt-1.5">
+                        <p className="line-clamp-2 text-[10px] font-semibold leading-snug text-slate-500">
+                          {submission.mcqQuestions[index]!.content}
+                        </p>
+                      </div>
+                    ) : null}
+
                     {showExplanation && explanationEnabled ? (
                       <div className="mt-2 border-t border-slate-200/70 pt-2">
                         {getExplanation(index)?.text ? (

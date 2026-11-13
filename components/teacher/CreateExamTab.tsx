@@ -11,6 +11,7 @@ import {
   Lightbulb,
   Plus,
   Save,
+  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
@@ -20,17 +21,23 @@ import type {
   ExamType,
   Grade,
   McqExplanation,
+  McqQuestion,
   ShortAnswerQuestion,
   SubPart,
+  TeacherDocument,
 } from '@/lib/types';
 import { GRADES, OPTION_LABELS, SUBJECTS } from '@/lib/types';
 import { cn, formatNumber } from '@/lib/utils';
 import { imageFilesFromClipboard, optimizeImage } from '@/lib/image';
 import { useToast } from '@/components/ui/FeedbackProvider';
+import { AiExamPanel } from '@/components/teacher/AiExamPanel';
+import type { AiExamDraft } from '@/lib/ai';
 
 type CreateExamTabProps = {
   onCreate: (exam: Exam) => boolean | Promise<boolean>;
   onCancel: () => void;
+  /** Tài liệu học tập giáo viên đã tải lên — nguồn cho AI soạn đề. */
+  documents?: TeacherDocument[];
 };
 
 const newId = (prefix = 'essay') =>
@@ -78,7 +85,7 @@ function NumberBadge({ children }: { children: ReactNode }) {
   );
 }
 
-export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
+export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExamTabProps) {
   const toast = useToast();
   const mcqInputRef = useRef<HTMLInputElement>(null);
   const essayInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -100,7 +107,12 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
   const [mcqExplanations, setMcqExplanations] = useState<McqExplanation[]>(() =>
     Array.from({ length: 10 }, () => ({ text: '', images: [] })),
   );
-  const [openExplanation, setOpenExplanation] = useState<number | null>(null);
+  /** Nội dung câu trắc nghiệm dạng văn bản (AI hoặc giáo viên nhập), theo index. */
+  const [mcqQuestions, setMcqQuestions] = useState<(McqQuestion | null)[]>(() =>
+    Array.from({ length: 10 }, () => null),
+  );
+  const [openTextQuestion, setOpenTextQuestion] = useState<number | null>(null);
+  const [openExplanation, setOpenExplanation] = useState(null as number | null);
   const explanationInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -133,6 +145,148 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
     setMcqExplanations((current) =>
       Array.from({ length: safe }, (_, index) => current[index] ?? { text: '', images: [] }),
     );
+    setMcqQuestions((current) => Array.from({ length: safe }, (_, index) => current[index] ?? null));
+    setOpenTextQuestion((current) => (current !== null && current >= safe ? null : current));
+  };
+
+  const updateMcqQuestion = (index: number, patch: Partial<McqQuestion>) => {
+    setMcqQuestions((current) => {
+      const item = current[index] ?? { content: '', options: ['', '', '', ''] };
+      const next = [...current];
+      next[index] = { ...item, ...patch };
+      return next;
+    });
+  };
+
+  const addTextMcq = (index: number) => {
+    setMcqQuestions((current) => {
+      const next = [...current];
+      if (!next[index]) next[index] = { content: '', options: ['', '', '', ''] };
+      return next;
+    });
+    setOpenTextQuestion(index);
+  };
+
+  const removeTextMcq = (index: number) => {
+    setMcqQuestions((current) => {
+      const next = [...current];
+      next[index] = null;
+      return next;
+    });
+    if (openTextQuestion === index) setOpenTextQuestion(null);
+  };
+
+  const aiNumber = (value: unknown, fallback: number) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  /** Điền cả form bằng đề nháp AI vừa sinh. */
+  const applyAiDraft = (draft: AiExamDraft) => {
+    const aiMcq = Array.isArray(draft?.mcq) ? draft.mcq : [];
+    const aiShort = Array.isArray(draft?.shortAnswers) ? draft.shortAnswers : [];
+    const aiEssay = Array.isArray(draft?.essays) ? draft.essays : [];
+
+    if (aiMcq.length + aiShort.length + aiEssay.length === 0) {
+      toast.error('AI không trả về câu hỏi nào', 'Thử đổi tài liệu khác hoặc gửi lại yêu cầu.');
+      return;
+    }
+
+    // Thông tin chung
+    const nextTitle = typeof draft.title === 'string' && draft.title.trim() ? draft.title.trim() : title;
+    const aiSubject = String(draft.subject ?? '');
+    const nextSubject = SUBJECTS.includes(aiSubject) ? aiSubject : subject;
+    const aiGrade = Math.round(aiNumber(draft.grade, grade));
+    const nextGrade = GRADES.includes(aiGrade as Grade) ? (aiGrade as Grade) : grade;
+    const aiDuration = Math.round(aiNumber(draft.durationMinutes, durationMinutes));
+    const nextDuration = Math.min(300, Math.max(1, aiDuration));
+    const aiTotal = aiNumber(draft.totalPoints, totalPoints);
+    const nextTotal = Number.isFinite(aiTotal) && aiTotal > 0 ? aiTotal : totalPoints;
+
+    // Trắc nghiệm
+    const nextHasMcq = aiMcq.length > 0;
+    const nextMcqCount = nextHasMcq ? Math.min(60, aiMcq.length) : effectiveMcqCount;
+    const nextMcqQuestions: (McqQuestion | null)[] = [];
+    const nextMcqAnswers: number[] = [];
+    const nextMcqExplanations: McqExplanation[] = [];
+    let hasExplanationText = false;
+    aiMcq.slice(0, 60).forEach((item) => {
+      const options = Array.isArray(item?.options)
+        ? item.options.slice(0, 4).map((option) => String(option ?? '').trim())
+        : [];
+      while (options.length < 4) options.push('');
+      const content = String(item?.content ?? '').trim();
+      nextMcqQuestions.push(content || options.some(Boolean) ? { content, options } : null);
+      nextMcqAnswers.push(Math.min(3, Math.max(0, Math.round(aiNumber(item?.correctIndex, 0)))));
+      const explanationText = String(item?.explanation ?? '').trim();
+      if (explanationText) hasExplanationText = true;
+      nextMcqExplanations.push({ text: explanationText, images: [] });
+    });
+
+    // Trả lời ngắn — đánh số tiếp sau trắc nghiệm
+    const nextShort: ShortAnswerQuestion[] = aiShort.map((item, index) => {
+      const points = Math.max(0, aiNumber(item?.points, 1));
+      return {
+        id: newId('short'),
+        questionLabel: `Câu ${nextMcqCount + index + 1}`,
+        points,
+        questionImage: '',
+        content: String(item?.content ?? '').trim(),
+        answer: String(item?.answer ?? '').trim(),
+        rubric: '',
+        explanation: { text: String(item?.explanation ?? '').trim(), images: [] },
+      };
+    });
+
+    // Tự luận — đánh số tiếp sau trả lời ngắn
+    const nextEssay: EssayQuestion[] = aiEssay.map((item, index) => {
+      const subParts: SubPart[] = Array.isArray(item?.subParts)
+        ? item.subParts.slice(0, 8).map((part, partIndex) => ({
+            label: String(part?.label ?? '') || String.fromCharCode(97 + partIndex),
+            content: String(part?.content ?? '').trim(),
+            points: Math.max(0, aiNumber(part?.points, 1)),
+          }))
+        : [{ label: 'a', content: String(item?.content ?? '').trim(), points: 2 }];
+      const total = Number(subParts.reduce((sum, part) => sum + part.points, 0).toFixed(2));
+      return {
+        id: newId(),
+        questionLabel: `Câu ${nextMcqCount + nextShort.length + index + 1}`,
+        points: total > 0 ? total : Math.max(0, aiNumber(item?.points, 2)),
+        questionImage: '',
+        subParts,
+        rubric: String(item?.rubric ?? '').trim(),
+      };
+    });
+
+    // Điểm mỗi câu TN = phần điểm còn lại của thang điểm
+    const shortPoints = nextShort.reduce((sum, question) => sum + question.points, 0);
+    const essayPoints = nextEssay.reduce((sum, question) => sum + question.points, 0);
+    const remaining = nextTotal - shortPoints - essayPoints;
+    const nextMcqPointPerQ =
+      nextMcqCount > 0 && remaining > 0
+        ? Math.round((remaining / nextMcqCount) * 100) / 100
+        : mcqPointPerQ;
+
+    setTitle(nextTitle);
+    setSubject(nextSubject);
+    setGrade(nextGrade);
+    setDurationMinutes(nextDuration);
+    setTotalPoints(nextTotal);
+    setHasMcq(nextHasMcq);
+    setMcqCount(Math.max(1, nextMcqCount));
+    setMcqPointPerQ(nextMcqPointPerQ);
+    setMcqAnswers(nextMcqAnswers);
+    setMcqQuestions(nextMcqQuestions);
+    setMcqExplanations(nextMcqExplanations);
+    setMcqExplanationEnabled(hasExplanationText);
+    setShortAnswerQuestions(nextShort);
+    setEssayQuestions(nextEssay);
+    setOpenTextQuestion(null);
+    setOpenExplanation(null);
+
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const addMcqFiles = async (files: File[]) => {
@@ -407,6 +561,8 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
     setMcqAnswers(Array(10).fill(0));
     setMcqExplanationEnabled(false);
     setMcqExplanations(Array.from({ length: 10 }, () => ({ text: '', images: [] })));
+    setMcqQuestions(Array.from({ length: 10 }, () => null));
+    setOpenTextQuestion(null);
     setOpenExplanation(null);
     setShortAnswerQuestions([]);
     setEssayQuestions([createEmptyEssay(7)]);
@@ -454,6 +610,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
       mcqCount: effectiveMcqCount,
       mcqPointPerQ: Number(mcqPointPerQ),
       mcqAnswers: hasMcq ? mcqAnswers.slice(0, mcqCount) : [],
+      mcqQuestions: hasMcq ? mcqQuestions.slice(0, effectiveMcqCount) : [],
       mcqExplanationEnabled: hasMcq ? mcqExplanationEnabled : false,
       mcqExplanations: hasMcq
         ? mcqExplanations.slice(0, effectiveMcqCount).map((item) => ({
@@ -513,6 +670,19 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
       </header>
 
       <div className="space-y-6">
+        {/* AI soạn đề — luôn hiển thị, panel tự báo thiếu API key / thiếu tài liệu */}
+        <AiExamPanel
+          documents={documents}
+          defaults={{
+            subject,
+            grade,
+            durationMinutes,
+            totalPoints,
+            examType: examType === 'practice' ? 'practice' : 'official',
+          }}
+          onApply={applyAiDraft}
+        />
+
         {/* STEP 1 */}
         <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
           <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
@@ -667,7 +837,7 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
               <h2 className="text-sm font-black text-slate-900">Phần trắc nghiệm</h2>
               <p className="text-[11px] font-medium text-slate-400">
                 {hasMcq
-                  ? 'Tải ảnh đề và chọn đáp án đúng cho từng câu'
+                  ? 'Tải ảnh đề, soạn câu hỏi văn bản hoặc để AI soạn — rồi chọn đáp án đúng cho từng câu'
                   : 'Đề này không có phần trắc nghiệm'}
               </p>
             </div>
@@ -819,7 +989,31 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
               {Array.from({ length: mcqCount }).map((_, index) => (
                 <div key={index} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                  <span className="pl-1 text-xs font-black text-slate-700">Câu {index + 1}</span>
+                  <span className="flex min-w-0 items-center gap-1.5 pl-1">
+                    <button
+                      type="button"
+                      onClick={() => (mcqQuestions[index] ? setOpenTextQuestion(index) : addTextMcq(index))}
+                      title={
+                        mcqQuestions[index]
+                          ? 'Sửa nội dung câu hỏi văn bản'
+                          : 'Soạn nội dung câu này bằng văn bản'
+                      }
+                      className={cn(
+                        'flex size-7 shrink-0 items-center justify-center rounded-lg text-[10px] font-black transition',
+                        mcqQuestions[index]
+                          ? 'bg-violet-600 text-white shadow-sm'
+                          : 'border border-slate-200 bg-white text-slate-400 hover:border-violet-300 hover:text-violet-600',
+                      )}
+                    >
+                      Aa
+                    </button>
+                    <span className="text-xs font-black text-slate-700">Câu {index + 1}</span>
+                    {mcqQuestions[index] ? (
+                      <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-700">
+                        có nội dung
+                      </span>
+                    ) : null}
+                  </span>
                   <div className="flex gap-1">
                     {OPTION_LABELS.map((label, optionIndex) => (
                       <button
@@ -847,6 +1041,113 @@ export function CreateExamTab({ onCreate, onCancel }: CreateExamTabProps) {
               ))}
             </div>
           </div>
+
+          {/* Nội dung câu hỏi trắc nghiệm dạng văn bản */}
+          {mcqQuestions.some(Boolean) ? (
+            <div className="mt-6 border-t border-slate-100 pt-6">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <label className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-600">
+                    <Sparkles className="size-4 text-violet-500" />
+                    Nội dung câu hỏi văn bản
+                  </label>
+                  <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                    Câu có nội dung văn bản sẽ hiển thị trực tiếp cho học sinh, không cần ảnh đề. Đáp án đúng chọn ở bảng phía trên.
+                  </p>
+                </div>
+                <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-black text-violet-700">
+                  {mcqQuestions.filter(Boolean).length}/{mcqCount} câu có nội dung
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {mcqQuestions.map((question, index) =>
+                  question ? (
+                    <div key={index} className="overflow-hidden rounded-2xl border border-violet-200 bg-violet-50/40">
+                      <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setOpenTextQuestion(openTextQuestion === index ? null : index)}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        >
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-[10px] font-black text-violet-700 ring-1 ring-violet-200">
+                            {index + 1}
+                          </span>
+                          <span className="truncate text-[11px] font-bold text-slate-700">
+                            {question.content.trim() || '(chưa nhập nội dung)'}
+                          </span>
+                          <ChevronDown
+                            className={cn(
+                              'ml-auto size-4 shrink-0 text-slate-400 transition-transform',
+                              openTextQuestion === index && 'rotate-180',
+                            )}
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeTextMcq(index)}
+                          className="shrink-0 rounded-lg p-1.5 text-rose-500 transition hover:bg-rose-100"
+                          aria-label={`Xóa nội dung câu ${index + 1}`}
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
+
+                      {openTextQuestion === index ? (
+                        <div className="space-y-3 border-t border-violet-100 p-3">
+                          <textarea
+                            value={question.content}
+                            onChange={(event) =>
+                              updateMcqQuestion(index, { content: event.target.value })
+                            }
+                            rows={3}
+                            placeholder={`Nội dung câu ${index + 1}... (hỗ trợ nhiều dòng)`}
+                            className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20"
+                          />
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {OPTION_LABELS.map((label, optionIndex) => (
+                              <div key={label} className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setMcqAnswers((current) => {
+                                      const next = [...current];
+                                      next[index] = optionIndex;
+                                      return next;
+                                    })
+                                  }
+                                  title="Chọn làm đáp án đúng"
+                                  className={cn(
+                                    'flex size-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-black transition',
+                                    (mcqAnswers[index] ?? 0) === optionIndex
+                                      ? 'bg-emerald-600 text-white shadow-sm'
+                                      : 'border border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:text-emerald-600',
+                                  )}
+                                >
+                                  {label}
+                                </button>
+                                <input
+                                  type="text"
+                                  value={question.options[optionIndex] ?? ''}
+                                  onChange={(event) => {
+                                    const options = [...question.options];
+                                    options[optionIndex] = event.target.value;
+                                    updateMcqQuestion(index, { options });
+                                  }}
+                                  placeholder={`Nội dung phương án ${label}`}
+                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null,
+                )}
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-6 border-t border-slate-100 pt-6">
             <div className="flex flex-wrap items-center justify-between gap-3">

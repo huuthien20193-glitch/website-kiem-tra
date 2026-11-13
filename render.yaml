@@ -13,3 +13,6 @@ services:
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
         sync: false
+      # API key Gemini để dùng AI đọc tài liệu & soạn đề — điền trên Render Dashboard.
+      - key: GEMINI_API_KEY
+        sync: false

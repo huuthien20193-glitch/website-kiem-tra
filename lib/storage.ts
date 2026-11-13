@@ -4,10 +4,12 @@ import type {
   Exam,
   Grade,
   McqExplanation,
+  McqQuestion,
   ShortAnswerDetail,
   ShortAnswerQuestion,
   Submission,
   SubPart,
+  TeacherDocument,
 } from './types';
 import { GRADES } from './types';
 import { answerMatches, round1 } from './utils';
@@ -16,6 +18,7 @@ export const STORAGE_KEYS = {
   exams: 'tht_teacher_exams',
   availableExams: 'tht_available_exams',
   submissions: 'tht_student_submissions',
+  documents: 'tht_teacher_documents',
   role: 'tht_user_role',
   username: 'tht_username',
   studentName: 'tht_student_name',
@@ -125,6 +128,25 @@ export function normalizeShortAnswerQuestion(
   };
 }
 
+/** Chuẩn hóa câu trắc nghiệm văn bản: giữ nguyên vị trí, chỉ nhận dữ liệu hợp lệ. */
+function normalizeMcqQuestions(raw: unknown, mcqCount: number): (McqQuestion | null)[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return Array.from({ length: mcqCount }, (_, index) => {
+    const item = list[index];
+    if (!item || typeof item !== 'object') return null;
+    const content = typeof (item as McqQuestion).content === 'string' ? (item as McqQuestion).content : '';
+    const options = Array.isArray((item as McqQuestion).options)
+      ? (item as McqQuestion).options
+          .slice(0, 4)
+          .map((option) => (typeof option === 'string' ? option : ''))
+      : [];
+    while (options.length < 4) options.push('');
+    const image = typeof (item as McqQuestion).image === 'string' ? (item as McqQuestion).image : '';
+    if (!content.trim() && !image) return null;
+    return { content, options, image: image || undefined } satisfies McqQuestion;
+  });
+}
+
 export function normalizeExam(raw: Partial<Exam>): Exam {
   const mcqCount = clamp(Math.round(asNumber(raw?.mcqCount, 0)), 0, 100);
   const mcqAnswers = Array.from({ length: mcqCount }, (_, index) => {
@@ -144,6 +166,7 @@ export function normalizeExam(raw: Partial<Exam>): Exam {
     status: typeof raw?.status === 'string' ? raw.status : 'Đã xuất bản',
     type: raw?.type === 'practice' ? 'practice' : 'official',
     mcqImages: Array.isArray(raw?.mcqImages) ? raw.mcqImages.filter((image): image is string => typeof image === 'string') : [],
+    mcqQuestions: normalizeMcqQuestions(raw?.mcqQuestions, mcqCount),
     mcqCount,
     mcqPointPerQ: Math.max(0, asNumber(raw?.mcqPointPerQ, 0.5)),
     mcqAnswers,
@@ -246,6 +269,7 @@ export function normalizeSubmission(raw: Partial<Submission>): Submission {
     studentMcqAnswers,
     correctMcqAnswers,
     mcqImages: Array.isArray(raw?.mcqImages) ? raw.mcqImages.filter((image): image is string => typeof image === 'string') : [],
+    mcqQuestions: normalizeMcqQuestions(raw?.mcqQuestions, clamp(Math.round(asNumber(raw?.mcqCount, correctMcqAnswers.length)), 0, 100)),
     mcqExplanationEnabled: raw?.mcqExplanationEnabled === true,
     mcqExplanations: Array.isArray(raw?.mcqExplanations)
       ? raw.mcqExplanations.map((item) =>
@@ -382,6 +406,44 @@ export function clearSubmissions(): Submission[] {
   return [];
 }
 
+/* ------------------------------ Tài liệu (documents) ------------------------------ */
+
+function normalizeDocument(raw: Partial<TeacherDocument>): TeacherDocument {
+  const fileType =
+    raw?.fileType === 'pdf' || raw?.fileType === 'docx' || raw?.fileType === 'image'
+      ? raw.fileType
+      : 'text';
+  return {
+    id: String(raw?.id ?? `doc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
+    title: typeof raw?.title === 'string' && raw.title ? raw.title : 'Tài liệu chưa đặt tên',
+    fileName: typeof raw?.fileName === 'string' ? raw.fileName : '',
+    fileType,
+    fileSize: Math.max(0, Math.round(asNumber(raw?.fileSize, 0))),
+    content: typeof raw?.content === 'string' ? raw.content : '',
+    imageData: typeof raw?.imageData === 'string' ? raw.imageData : undefined,
+    pdfData: typeof raw?.pdfData === 'string' ? raw.pdfData : undefined,
+    summary: typeof raw?.summary === 'string' ? raw.summary : undefined,
+    createdAt: typeof raw?.createdAt === 'string' ? raw.createdAt : undefined,
+  };
+}
+
+export function loadDocuments(): TeacherDocument[] {
+  if (!hasWindow()) return [];
+  const raw = window.localStorage.getItem(STORAGE_KEYS.documents);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((document) => normalizeDocument(document));
+  } catch {
+    return [];
+  }
+}
+
+export function saveDocuments(documents: TeacherDocument[]): boolean {
+  return writeJSON(STORAGE_KEYS.documents, documents);
+}
+
 export function buildSubmission(
   exam: Exam,
   studentName: string,
@@ -449,6 +511,7 @@ export function buildSubmission(
     studentMcqAnswers: mcqAnswers,
     correctMcqAnswers: exam.mcqAnswers,
     mcqImages: exam.mcqImages,
+    mcqQuestions: exam.mcqQuestions ? exam.mcqQuestions.map((item) => (item ? { ...item } : null)) : [],
     mcqExplanationEnabled: exam.mcqExplanationEnabled === true,
     mcqExplanations: exam.mcqExplanations ? [...exam.mcqExplanations] : [],
     shortAnswerDetails,

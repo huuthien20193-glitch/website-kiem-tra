@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Award,
+  BookOpen,
   FileText,
   GraduationCap,
   LayoutDashboard,
@@ -15,14 +16,15 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import type { Exam, Grade, Submission, TeacherTab } from '@/lib/types'
-import { clearSession, getSession, loadExams, loadSubmissions, saveExams, saveSubmissions } from '@/lib/storage'
+import type { Exam, Grade, Submission, TeacherDocument, TeacherTab } from '@/lib/types'
+import { clearSession, getSession, loadDocuments, loadExams, loadSubmissions, saveExams, saveSubmissions } from '@/lib/storage'
 import { cn, formatNumber, isPending } from '@/lib/utils'
 import { downloadCsv } from '@/lib/export'
 import { BrandLogo } from '@/components/ui/Brand'
 import {
   createClient,
   deleteExamFromCloud,
+  fetchDocumentsFromCloud,
   fetchExamsFromCloud,
   fetchSubmissionsFromCloud,
   saveExamToCloud,
@@ -33,13 +35,15 @@ import { useIsClient } from '@/lib/hooks'
 import { OverviewTab } from '@/components/teacher/OverviewTab'
 import { ExamsTab } from '@/components/teacher/ExamsTab'
 import { CreateExamTab } from '@/components/teacher/CreateExamTab'
+import { DocumentsTab } from '@/components/teacher/DocumentsTab'
 import { SubmissionsTab } from '@/components/teacher/SubmissionsTab'
 import { GradingModal } from '@/components/teacher/GradingModal'
 
 const NAV_ITEMS: Array<{ key: TeacherTab; label: string; icon: typeof LayoutDashboard; hint: string }> = [
   { key: 'overview', label: 'Tổng quan', icon: LayoutDashboard, hint: 'Bảng điều khiển' },
+  { key: 'documents', label: 'Tài liệu học tập', icon: BookOpen, hint: 'AI đọc & hỏi đáp' },
   { key: 'exams', label: 'Quản lý đề thi', icon: FileText, hint: 'Danh sách đề' },
-  { key: 'create-exam', label: 'Tạo đề kiểm tra', icon: Plus, hint: 'Thiết kế đề mới' },
+  { key: 'create-exam', label: 'Tạo đề kiểm tra', icon: Plus, hint: 'AI soạn đề từ tài liệu' },
   { key: 'submissions', label: 'Kết quả & Chấm bài', icon: Award, hint: 'Bài nộp học sinh' },
 ]
 
@@ -52,6 +56,7 @@ export default function TeacherDashboard() {
   const session = isClient ? getSession() : { role: null as string | null, username: '' }
   const [activeTab, setActiveTab] = useState<TeacherTab>('overview')
   const [exams, setExams] = useState<Exam[]>([])
+  const [documents, setDocuments] = useState<TeacherDocument[]>([])
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [submissionsLoading, setSubmissionsLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -68,6 +73,16 @@ export default function TeacherDashboard() {
       return
     }
     setExams(typeof window !== 'undefined' ? loadExams() : [])
+  }
+
+  // Tải tài liệu học tập: ưu tiên Supabase, dự phòng localStorage.
+  const fetchDocuments = async () => {
+    const cloud = await fetchDocumentsFromCloud()
+    if (cloud) {
+      setDocuments(cloud)
+      return
+    }
+    setDocuments(typeof window !== 'undefined' ? loadDocuments() : [])
   }
 
   // Tải danh sách bài nộp từ Supabase.
@@ -92,6 +107,7 @@ export default function TeacherDashboard() {
     const timer = setTimeout(() => {
       void fetchExams()
       void fetchSubmissions()
+      void fetchDocuments()
     }, 0)
     return () => clearTimeout(timer)
      
@@ -102,6 +118,7 @@ export default function TeacherDashboard() {
     const handleFocus = () => {
       fetchExams()
       fetchSubmissions()
+      fetchDocuments()
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
@@ -415,6 +432,10 @@ export default function TeacherDashboard() {
             />
           ) : null}
 
+          {activeTab === 'documents' ? (
+            <DocumentsTab documents={documents} onDocumentsChange={setDocuments} />
+          ) : null}
+
           {activeTab === 'exams' ? (
             <ExamsTab
               exams={exams}
@@ -428,7 +449,11 @@ export default function TeacherDashboard() {
           ) : null}
 
           {activeTab === 'create-exam' ? (
-            <CreateExamTab onCreate={handleCreateExam} onCancel={() => navigate('exams')} />
+            <CreateExamTab
+              onCreate={handleCreateExam}
+              onCancel={() => navigate('exams')}
+              documents={documents}
+            />
           ) : null}
 
           {activeTab === 'submissions' ? (
