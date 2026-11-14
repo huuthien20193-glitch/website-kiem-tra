@@ -6,6 +6,7 @@ import {
   knowledgeStats,
   selectKnowledge,
 } from '@/lib/knowledge';
+import { figureDataUrlFromAi } from '@/lib/figure';
 
 /**
  * API AI cho phần giáo viên — gọi Google Gemini.
@@ -63,7 +64,7 @@ type AiDocument = {
 };
 
 type GenerateBody = {
-  action: 'summarize' | 'chat' | 'generate-exam' | 'validate-key' | 'ocr' | 'regenerate-question';
+  action: 'summarize' | 'chat' | 'generate-exam' | 'validate-key' | 'ocr' | 'regenerate-question' | 'generate-figure';
   apiKey?: string;
   documents?: AiDocument[];
   document?: AiDocument;
@@ -74,6 +75,8 @@ type GenerateBody = {
   grade?: number;
   topic?: string;
   instruction?: string;
+  /** Nội dung câu hỏi cần vẽ hình — dùng cho action 'generate-figure'. */
+  content?: string;
   /** Nội dung các câu hiện có để AI tránh trùng lặp. */
   exclude?: string[];
   options?: {
@@ -458,6 +461,16 @@ function normalizeExamDraft(raw: UnknownRecord): UnknownRecord {
   draft.durationMinutes = Math.min(300, Math.max(1, Math.round(toNumber(draft.durationMinutes, 45))));
   draft.totalPoints = Math.max(1, toNumber(draft.totalPoints, 10));
 
+  // ---- Hình minh họa: chuyển đặc tả "figure" (đặc tả bar/graph hoặc SVG) thành data URL ----
+  for (const key of ['mcq', 'multiMcq', 'trueFalse', 'fillBlanks', 'calculations', 'shortAnswers', 'essays']) {
+    if (Array.isArray(draft[key])) {
+      draft[key] = (draft[key] as UnknownRecord[]).map((item) => ({
+        ...item,
+        figureSvg: figureDataUrlFromAi(item),
+      }));
+    }
+  }
+
   return draft;
 }
 
@@ -500,6 +513,12 @@ function documentSection(documents: AiDocument[]): GeminiPart[] {
   return documents.flatMap((document, index) => partsFromDocument(document, index));
 }
 
+
+/** Mô tả ngắn trường "figure" — hình minh họa tùy chọn cho câu hỏi. */
+const FIGURE_FIELD = `"figure": (tùy chọn, CHỈ khi câu hỏi thật sự cần hình minh họa) một trong:
+        - biểu đồ cột: { "kind": "bar", "title": "string", "labels": ["A", "B"], "values": [10, 20], "unit": "cm" }
+        - đồ thị hàm số y=f(x): { "kind": "graph", "expression": "biểu thức theo biến x (viết phép nhân rõ ràng: 2*x)", "xMin": -2, "xMax": 3 }
+        - hình vẽ khác (hình học, sơ đồ đơn giản): { "kind": "shape", "svg": "code SVG hoàn chỉnh, chỉ dùng rect/circle/line/path/polygon/text" }`;
 
 const EXAM_JSON_SPEC = `Trả về DUY NHẤT một object JSON theo đúng cấu trúc sau (không thêm chữ nào ngoài JSON). Bỏ hẳn mảng nào có số lượng = 0:
 {
@@ -578,7 +597,9 @@ const EXAM_JSON_SPEC = `Trả về DUY NHẤT một object JSON theo đúng cấ
       "level": "string",
       "sourcePages": [9]
     }
-  ]
+  ],
+  LƯU Ý HÌNH MINH HỌA — bất kỳ câu hỏi nào ở các mảng trên (ưu tiên mcq, calculations, shortAnswers, essays) có thể thêm trường "figure" (TÙY CHỌN, chỉ khi hình thật sự giúp hiểu đề — đồ thị hàm số, biểu đồ dữ liệu, hình hình học):
+  ${FIGURE_FIELD}
 }`;
 
 function buildExamSystemPrompt(): string {
@@ -604,6 +625,7 @@ function buildExamSystemPrompt(): string {
     '- MỖI câu phải ghi "topic" (chủ đề), "level" (một trong: nhận biết, thông hiểu, vận dụng, vận dụng cao) và "sourcePages" (mảng số trang của đoạn kiến thức bạn dùng — xem nhãn [KN-… · Tài liệu … · trang …] trong KHO KIẾN THỨC). Không bịa số trang.',
     '- Khi ở chế độ CHỈ DÙNG TÀI LIỆU: chỉ dùng kiến thức trong KHO KIẾN THỨC; nếu kho quá ngắn để đủ số câu thì giảm số câu thay vì bịa kiến thức ngoài.',
     '- calculations: kèm "computation": { "expression": "biểu thức CHỈ dùng số và + - * / ^ ( ) tính ra đáp án", "expected": số }. Hệ thống sẽ tự tính lại biểu thức để kiểm chứng đáp án.',
+    '- "figure" là TÙY CHỌN: chỉ thêm khi hình vẽ THẬT SỰ cần thiết (đồ thị hàm số, biểu đồ dữ liệu, hình hình học). Ưu tiên kind "bar"/"graph" — hệ thống vẽ bằng code cho chuẩn xác; chỉ dùng "shape" với hình hình học đơn giản và code SVG phải nằm trong thẻ <svg>...</svg>. Không thêm figure cho câu hỏi chữ thuần túy.',
     '- Không nhắc lại tài liệu nguyên văn dài; viết lại câu hỏi theo cách của bạn.',
   ].join('\n');
 }
@@ -1011,7 +1033,51 @@ export async function POST(request: NextRequest) {
       if (!question) {
         throw lastParseError ?? new Error('AI không trả về câu hỏi hợp lệ.');
       }
-      return Response.json({ ok: true, question });
+      // Nếu AI kèm đặc tả hình minh họa thì vẽ ngay thành data URL SVG.
+      const figureSvg = figureDataUrlFromAi(question);
+      return Response.json({ ok: true, question: figureSvg ? { ...question, figureSvg } : question });
+    }
+
+    if (body.action === 'generate-figure') {
+      // Vẽ hình minh họa cho MỘT câu hỏi có sẵn: AI trả đặc tả, hệ thống vẽ bằng code.
+      const content = (body.content || '').trim();
+      if (!content) {
+        return Response.json({ ok: false, message: 'Thiếu nội dung câu hỏi cần vẽ hình.' }, { status: 400 });
+      }
+      const documents = Array.isArray(body.documents) ? body.documents : [];
+      const parts: GeminiPart[] = [];
+      if (documents.length > 0) {
+        parts.push(...documentSection(documents));
+      }
+      parts.push({
+        text: [
+          `Nội dung câu hỏi cần vẽ hình minh họa:\n"""\n${content.slice(0, 1200)}\n"""`,
+          body.instruction ? `Yêu cầu thêm của giáo viên: ${body.instruction}` : '',
+          'Hãy chọn hình minh họa PHÙ HỢP NHẤT cho câu hỏi này và trả về DUY NHẤT một object JSON: { "figure": ... }.',
+          FIGURE_FIELD.replace(/\n\s+/g, ' '),
+          'Ưu tiên kind "graph" cho hàm số, "bar" cho dữ liệu thống kê; chỉ dùng "shape" cho hình hình học/sơ đồ đơn giản.',
+          'Nếu câu hỏi KHÔNG cần hình (câu chữ thuần túy), trả về { "figure": null }.',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      });
+
+      let figure: Record<string, unknown> | null = null;
+      for (let attempt = 0; attempt < 2 && !figure; attempt += 1) {
+        const raw = await callGemini(parts, REGENERATE_SYSTEM, true, 110_000, body.apiKey);
+        try {
+          const parsed = extractJson<Record<string, unknown>>(raw);
+          const candidate = Array.isArray(parsed) ? (parsed[0] as Record<string, unknown>) : parsed;
+          figure = candidate && typeof candidate === 'object' ? (candidate as Record<string, unknown>) : null;
+        } catch {
+          // Lần thử đầu có thể hỏng JSON — thử lại một lần nữa.
+        }
+      }
+      const figureSvg = figure ? figureDataUrlFromAi(figure) : undefined;
+      if (!figureSvg) {
+        return Response.json({ ok: false, message: 'AI xác định câu này không cần hình minh họa, hoặc không vẽ được hình phù hợp.' });
+      }
+      return Response.json({ ok: true, figureSvg });
     }
 
     return Response.json({ ok: false, message: 'Hành động không được hỗ trợ.' }, { status: 400 });

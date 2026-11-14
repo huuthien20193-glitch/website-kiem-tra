@@ -7,6 +7,7 @@ import {
   CircleAlert,
   GraduationCap,
   ImagePlus,
+  Images,
   Layers,
   Lightbulb,
   LoaderCircle,
@@ -38,6 +39,7 @@ import { ExtraQuestionsEditor } from '@/components/teacher/ExtraQuestionsEditor'
 import {
   aiPayloadFromDocument,
   aiRegenerateQuestion,
+  aiGenerateFigure,
   type AiCalculationDraft,
   type AiExamDraft,
   type AiFillBlankDraft,
@@ -197,6 +199,8 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
   const [essayQuestions, setEssayQuestions] = useState<EssayQuestion[]>([createEmptyEssay(7)]);
   /** Id câu đang được AI tạo lại (nếu có). */
   const [regeneratingId, setRegeneratingId] = useState<string | number | null>(null);
+  /** Id câu đang được AI vẽ hình minh họa (nếu có). */
+  const [figuringId, setFiguringId] = useState<string | number | null>(null);
 
   const effectiveMcqCount = hasMcq ? mcqCount : 0;
   const mcqPoints = useMemo(
@@ -302,7 +306,12 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         : [];
       while (options.length < 4) options.push('');
       const content = String(item?.content ?? '').trim();
-      nextMcqQuestions.push(content || options.some(Boolean) ? { content, options, ...provenanceOf(item) } : null);
+      const figureSvg = typeof item?.figureSvg === 'string' && item.figureSvg.startsWith('data:image/svg') ? item.figureSvg : undefined;
+      nextMcqQuestions.push(
+        content || options.some(Boolean) || figureSvg
+          ? { content, options, image: figureSvg, ...provenanceOf(item) }
+          : null,
+      );
       nextMcqAnswers.push(Math.min(3, Math.max(0, Math.round(aiNumber(item?.correctIndex, 0)))));
       const explanationText = String(item?.explanation ?? '').trim();
       if (explanationText) hasExplanationText = true;
@@ -330,6 +339,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         options,
         correctIndexes,
         explanation: { text: explanationText, images: [] },
+        questionImage: typeof item?.figureSvg === 'string' ? item.figureSvg : '',
         ...provenanceOf(item),
       });
     });
@@ -350,6 +360,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         content: String(item?.content ?? '').trim(),
         statements,
         explanation: { text: explanationText, images: [] },
+        questionImage: typeof item?.figureSvg === 'string' ? item.figureSvg : '',
         ...provenanceOf(item),
       });
     });
@@ -379,7 +390,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         id: newId('short'),
         questionLabel: `Câu ${nextMcqCount + nextExtra.length + index + 1}`,
         points: Math.max(0.25, aiNumber(item?.points, 1)),
-        questionImage: '',
+        questionImage: typeof item?.figureSvg === 'string' ? item.figureSvg : '',
         content,
         answer,
         rubric: '',
@@ -404,7 +415,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         id: newId(),
         questionLabel: `Câu ${nextMcqCount + nextExtra.length + nextShort.length + index + 1}`,
         points: total > 0 ? total : Math.max(0, aiNumber(item?.points, 2)),
-        questionImage: '',
+        questionImage: typeof item?.figureSvg === 'string' ? item.figureSvg : '',
         subParts,
         rubric: String(item?.rubric ?? '').trim(),
         ...provenanceOf(item),
@@ -502,6 +513,46 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
     }
   };
 
+  /** Yêu cầu AI vẽ hình minh họa SVG cho một câu hỏi rồi gắn vào ảnh đề của câu đó. */
+  const generateFigure = async (target: 'mcq' | 'short' | 'essay', targetId: string | number) => {
+    if (figuringId) return;
+    setFiguringId(targetId);
+    try {
+      // Gom nội dung câu hỏi theo loại để AI hiểu phải vẽ hình gì.
+      let content = '';
+      if (target === 'mcq' && typeof targetId === 'number') {
+        content = mcqQuestions[targetId]?.content ?? '';
+      } else if (target === 'short') {
+        content = shortAnswerQuestions.find((question) => String(question.id) === String(targetId))?.content ?? '';
+      } else {
+        content =
+          essayQuestions
+            .find((question) => String(question.id) === String(targetId))
+            ?.subParts.map((part) => part.content)
+            .filter(Boolean)
+            .join('\n') ?? '';
+      }
+      if (!content.trim()) {
+        toast.error('Chưa có nội dung câu hỏi', 'Nhập nội dung câu hỏi trước khi yêu cầu AI vẽ hình.');
+        setFiguringId(null);
+        return;
+      }
+      const { figureSvg } = await aiGenerateFigure({ documents: buildAiPayload(), content });
+      if (target === 'mcq' && typeof targetId === 'number') {
+        updateMcqQuestion(targetId, { image: figureSvg });
+      } else if (target === 'short') {
+        updateShortAnswer(targetId, { questionImage: figureSvg });
+      } else {
+        updateEssay(targetId, { questionImage: figureSvg });
+      }
+      toast.success('Đã tạo hình minh họa', 'AI đã vẽ hình SVG — xem lại trước khi xuất bản nhé.');
+    } catch (error) {
+      toast.error('AI không vẽ được hình', error instanceof Error ? error.message : 'Vui lòng thử lại.');
+    } finally {
+      setFiguringId(null);
+    }
+  };
+
   /** Gán câu hỏi AI vừa tạo lại vào đúng vị trí cũ trên form. */
   const applyRegeneratedQuestion = (
     kind: 'mcq' | 'multi-mcq' | 'true-false' | 'fill-blank' | 'short' | 'calculation' | 'essay',
@@ -517,7 +568,12 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         ? question.options.slice(0, 4).map((option) => String(option ?? '').trim())
         : [];
       while (options.length < 4) options.push('');
-      updateMcqQuestion(targetId, { content, options, ...provenanceOf(question) });
+      updateMcqQuestion(targetId, {
+        content,
+        options,
+        image: typeof question?.figureSvg === 'string' ? question.figureSvg : undefined,
+        ...provenanceOf(question),
+      });
       setMcqAnswers((current) => {
         const next = [...current];
         next[targetId] = Math.min(3, Math.max(0, Math.round(aiNumber(question?.correctIndex, 0))));
@@ -566,6 +622,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
       updateEssay(targetId, {
         points,
         rubric: String(question?.rubric ?? '').trim(),
+        questionImage: typeof question?.figureSvg === 'string' ? question.figureSvg : undefined,
         subParts: Array.isArray(question?.subParts)
           ? question.subParts.slice(0, 8).map((part, index) => ({
               label: String(part?.label ?? '') || String.fromCharCode(97 + index),
@@ -590,6 +647,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
       content,
       answer,
       points,
+      questionImage: typeof question?.figureSvg === 'string' ? question.figureSvg : undefined,
       computation: kind === 'calculation' ? computationOf(question) : undefined,
       ...provenanceOf(question),
     });
@@ -1440,7 +1498,44 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
 
                       {openTextQuestion === index ? (
                         <div className="space-y-3 border-t border-violet-100 p-3">
-                          <ProvenanceBadges provenance={question} />
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <ProvenanceBadges provenance={question} />
+                            <div className="flex items-center gap-1.5">
+                              {question.image ? (
+                                <button
+                                  type="button"
+                                  onClick={() => updateMcqQuestion(index, { image: undefined })}
+                                  className="inline-flex items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-bold text-rose-500 transition hover:bg-rose-100"
+                                >
+                                  <X className="size-3.5" /> Gỡ hình
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => void generateFigure('mcq', index)}
+                                disabled={figuringId !== null}
+                                title="Yêu cầu AI vẽ hình minh họa cho câu này"
+                                className="inline-flex items-center gap-1 rounded-xl border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-bold text-teal-700 transition hover:bg-teal-100 disabled:opacity-60"
+                              >
+                                {figuringId === index ? (
+                                  <LoaderCircle className="size-3.5 animate-spin" />
+                                ) : (
+                                  <Images className="size-3.5" />
+                                )}
+                                AI vẽ hình
+                              </button>
+                            </div>
+                          </div>
+                          {question.image ? (
+                            <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={question.image}
+                                alt={`Hình minh họa câu ${index + 1}`}
+                                className="max-h-44 w-full rounded-lg bg-white object-contain"
+                              />
+                            </div>
+                          ) : null}
                           <textarea
                             value={question.content}
                             onChange={(event) =>
@@ -1759,6 +1854,20 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                     </button>
                     <button
                       type="button"
+                      onClick={() => void generateFigure('short', question.id)}
+                      disabled={figuringId !== null}
+                      title="Yêu cầu AI vẽ hình minh họa cho câu này"
+                      className="inline-flex items-center gap-1 rounded-xl border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-bold text-teal-700 transition hover:bg-teal-100 disabled:opacity-60"
+                    >
+                      {figuringId === question.id ? (
+                        <LoaderCircle className="size-3.5 animate-spin" />
+                      ) : (
+                        <Images className="size-3.5" />
+                      )}
+                      AI vẽ hình
+                    </button>
+                    <button
+                      type="button"
                       onClick={() =>
                         setShortAnswerQuestions((current) =>
                           current.filter((item) => item.id !== question.id),
@@ -2015,6 +2124,20 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                           <Sparkles className="size-3.5" />
                         )}
                         Tạo lại
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void generateFigure('essay', question.id)}
+                        disabled={figuringId !== null}
+                        title="Yêu cầu AI vẽ hình minh họa cho câu này"
+                        className="inline-flex items-center gap-1 self-start rounded-xl border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-bold text-teal-700 transition hover:bg-teal-100 disabled:opacity-60 sm:self-auto"
+                      >
+                        {figuringId === question.id ? (
+                          <LoaderCircle className="size-3.5 animate-spin" />
+                        ) : (
+                          <Images className="size-3.5" />
+                        )}
+                        AI vẽ hình
                       </button>
                       <button
                         type="button"

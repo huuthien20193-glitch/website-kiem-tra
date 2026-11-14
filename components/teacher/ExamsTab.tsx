@@ -67,6 +67,77 @@ async function ensureVietnameseFonts(doc: jsPDF): Promise<void> {
   }
 }
 
+/* ----------------------- Nhúng hình minh họa vào PDF -----------------------
+ * jsPDF không nhúng trực tiếp được SVG (vector). Mọi ảnh — kể cả data URL
+ * SVG do AI vẽ — được rasterize qua <canvas> thành PNG trước khi addImage.
+ * Ảnh nạp lỗi thì trả về null, phía gọi in dòng chú thích thay thế.
+ * -------------------------------------------------------------------------- */
+type RasterizedImage = { dataUrl: string; width: number; height: number; format: 'PNG' | 'JPEG' };
+
+async function rasterizeImageForPdf(dataUrl: string): Promise<RasterizedImage | null> {
+  if (typeof document === 'undefined') return null;
+  try {
+    const image = new Image();
+    image.src = dataUrl;
+    await image.decode();
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    if (!width || !height) return null;
+
+    // SVG: vẽ lên canvas phóng 2x để nét khi in, rồi đổi sang PNG.
+    if (/^data:image\/svg/i.test(dataUrl)) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(width * 2);
+      canvas.height = Math.round(height * 2);
+      const context = canvas.getContext('2d');
+      if (!context) return null;
+      // Nền trắng — SVG minh họa đề in ra giấy trắng.
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const png = canvas.toDataURL('image/png');
+      if (!png.startsWith('data:image/png')) return null;
+      return { dataUrl: png, width: canvas.width, height: canvas.height, format: 'PNG' };
+    }
+    return {
+      dataUrl,
+      width,
+      height,
+      format: /^data:image\/jpe?g/i.test(dataUrl) ? 'JPEG' : 'PNG',
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Nhúng một ảnh data URL vào PDF, co giãn vừa khung (mm). Trả về chiều cao
+ * thực đã chiếm (mm) hoặc null nếu không nhúng được.
+ */
+async function embedImageInPdf(
+  doc: jsPDF,
+  dataUrl: string,
+  x: number,
+  y: number,
+  maxWidth = 80,
+  maxHeight = 62,
+): Promise<number | null> {
+  const image = await rasterizeImageForPdf(dataUrl);
+  if (!image) return null;
+  // Đổi pixel → mm (96 dpi) rồi co về khung cho phép.
+  let widthMm = (image.width * 25.4) / 96;
+  let heightMm = (image.height * 25.4) / 96;
+  const scale = Math.min(1, maxWidth / widthMm, maxHeight / heightMm);
+  widthMm *= scale;
+  heightMm *= scale;
+  try {
+    doc.addImage(image.dataUrl, image.format, x, y, widthMm, heightMm);
+    return heightMm;
+  } catch {
+    return null;
+  }
+}
+
 type ExamsTabProps = {
   exams: Exam[];
   onCreate: () => void;
@@ -161,6 +232,46 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
       return lines.length;
     };
 
+    /**
+     * In dòng nguồn gốc câu hỏi AI (chủ đề, mức độ, trang tài liệu tham chiếu)
+     * bằng chữ nhỏ màu xám; câu bị QC đánh dấu thì thêm nhãn đỏ [CẦN XEM XÉT].
+     */
+    const writeProvenance = (provenance: { topic?: string; level?: string; sourcePages?: number[]; needsReview?: boolean }) => {
+      const parts: string[] = [];
+      if (provenance.topic) parts.push(`Chủ đề: ${provenance.topic}`);
+      if (provenance.level) parts.push(`Mức độ: ${provenance.level}`);
+      if (provenance.sourcePages?.length) parts.push(`Tham chiếu tài liệu, trang ${provenance.sourcePages.join(', ')}`);
+      if (parts.length === 0 && !provenance.needsReview) return;
+      ensureSpace(5);
+      doc.setFont(FONT_FAMILY, 'normal');
+      doc.setFontSize(7.5);
+      let cursorX = margin;
+      if (provenance.needsReview) {
+        doc.setTextColor(225, 29, 72); // rose-600
+        doc.text('[CẦN XEM XÉT]', cursorX, y);
+        cursorX += 18;
+      }
+      doc.setTextColor(120, 120, 120);
+      doc.text(parts.join('  ·  '), cursorX, y);
+      y += 4;
+      doc.setTextColor(0, 0, 0);
+    };
+
+    /** Nhúng ảnh minh họa (kể cả SVG do AI vẽ) vào vị trí hiện tại; ảnh lỗi thì in chú thích. */
+    const embedFigure = async (dataUrl: string) => {
+      const height = await embedImageInPdf(doc, dataUrl, margin, y);
+      if (height !== null) {
+        y += height + 2;
+        return;
+      }
+      doc.setFont(FONT_FAMILY, 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text('[Có hình minh họa hiển thị trong hệ thống]', margin, y);
+      y += 5;
+      doc.setTextColor(0, 0, 0);
+    };
+
     doc.setTextColor(0, 0, 0);
 
     // ---- Đầu trang: tên trường → tên đề → thông tin chung (tất cả căn giữa) ----
@@ -245,6 +356,11 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
           });
           y += lines.length * 4.5 + 1.5;
 
+          // Hình minh họa do AI vẽ (nếu có) đặt ngay dưới nội dung câu hỏi.
+          if (question.image) {
+            await embedFigure(question.image);
+          }
+
           // 4 phương án A/B/C/D, căn lề trái thống nhất cho gọn.
           const optionLabels = ['A', 'B', 'C', 'D'];
           doc.setFontSize(9.5);
@@ -260,6 +376,12 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
             y += optionLines.length * 4.5;
           });
           y += 3;
+          writeProvenance(question);
+        } else if (question?.image) {
+          // Câu chỉ có hình, không có nội dung văn bản.
+          y += 2;
+          await embedFigure(question.image);
+          writeProvenance(question);
         } else {
           // Câu chỉ có ảnh (không có nội dung văn bản): ghi chú để giáo viên in ảnh đề riêng.
           y += 5;
@@ -309,6 +431,128 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
       }
     }
 
+    // ---- Phần: Câu hỏi mở rộng (TN nhiều đáp án + Đúng/Sai) ----
+    const extraQuestions = exam.extraQuestions ?? [];
+    if (extraQuestions.length > 0) {
+      ensureSpace(16);
+      doc.setFontSize(12);
+      doc.setFont(FONT_FAMILY, 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text(`${roman[sectionIndex]}. PHẦN CÂU HỎI MỞ RỘNG`, margin, y);
+      sectionIndex += 1;
+
+      y += 6;
+      doc.setFont(FONT_FAMILY, 'normal');
+      doc.setFontSize(10);
+      doc.text(`Số câu: ${extraQuestions.length} · Điểm/câu: in trên từng câu`, margin, y);
+      y += 7;
+
+      const extraAnswerRows: string[][] = [];
+
+      for (let questionIndex = 0; questionIndex < extraQuestions.length; questionIndex += 1) {
+        const question = extraQuestions[questionIndex];
+        ensureSpace(18);
+
+        doc.setFont(FONT_FAMILY, 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`${question.questionLabel || `Câu ${questionIndex + 1}`} (${question.points} điểm)`, margin, y);
+        y += 5;
+
+        if (question.content?.trim()) {
+          doc.setFont(FONT_FAMILY, 'normal');
+          writeParagraph(question.content.trim(), 9);
+          y += 1;
+        }
+
+        // Hình minh họa của câu (nếu có).
+        if (question.questionImage) {
+          await embedFigure(question.questionImage);
+        }
+
+        const options = question.kind === 'multi-mcq' ? question.options ?? [] : [];
+        const statements = question.kind === 'true-false' ? question.statements ?? [] : [];
+
+        if (question.kind === 'multi-mcq') {
+          doc.setFont(FONT_FAMILY, 'normal');
+          doc.setFontSize(9);
+          doc.setTextColor(120, 120, 120);
+          doc.text('(Chọn nhiều phương án đúng)', margin + 8, y);
+          y += 5;
+          doc.setTextColor(0, 0, 0);
+          options.forEach((option, optionIndex) => {
+            ensureSpace(5);
+            const optionLines = doc.splitTextToSize(
+              `${['A', 'B', 'C', 'D'][optionIndex]}. ${option || '...'}`,
+              contentWidth - 8,
+            ) as string[];
+            optionLines.forEach((line, lineIndex) => {
+              doc.text(line, margin + 8, y + lineIndex * 4.5);
+            });
+            y += optionLines.length * 4.5;
+          });
+          extraAnswerRows.push([
+            question.questionLabel || `Câu ${questionIndex + 1}`,
+            (question.correctIndexes ?? []).map((value) => 'ABCD'[value] ?? '?').join(', ') || '?',
+          ]);
+        } else {
+          doc.setFont(FONT_FAMILY, 'normal');
+          doc.setFontSize(9);
+          doc.setTextColor(120, 120, 120);
+          doc.text('(Xét Đúng/Sai từng ý)', margin + 8, y);
+          y += 5;
+          doc.setTextColor(0, 0, 0);
+          statements.forEach((statement, statementIndex) => {
+            ensureSpace(5);
+            const statementLines = doc.splitTextToSize(
+              `${String.fromCharCode(97 + statementIndex)}) ${statement.text}`,
+              contentWidth - 8,
+            ) as string[];
+            statementLines.forEach((line, lineIndex) => {
+              doc.text(line, margin + 8, y + lineIndex * 4.5);
+            });
+            y += statementLines.length * 4.5;
+          });
+          extraAnswerRows.push([
+            question.questionLabel || `Câu ${questionIndex + 1}`,
+            statements.map((statement) => (statement.answer ? 'Đ' : 'S')).join(' · ') || '?',
+          ]);
+        }
+        y += 2;
+        writeProvenance(question);
+        y += 2;
+      }
+
+      // Bảng đáp án đúng của phần mở rộng (giáo viên giữ để đối chiếu).
+      if (extraAnswerRows.length > 0) {
+        ensureSpace(18);
+        doc.setFont(FONT_FAMILY, 'bold');
+        doc.setFontSize(11);
+        doc.setTextColor(0, 0, 0);
+        doc.text('BẢNG ĐÁP ÁN PHẦN MỞ RỘNG (dành cho giáo viên)', margin, y);
+        y += 5;
+
+        autoTable.default(doc, {
+          startY: y,
+          head: [['Câu', 'Đáp án']],
+          body: extraAnswerRows,
+          margin: { left: margin, right: margin },
+          theme: 'grid',
+          styles: { font: FONT_FAMILY, fontSize: 9 },
+          headStyles: {
+            font: FONT_FAMILY,
+            fontStyle: 'bold',
+            fillColor: [13, 148, 136], // teal-600
+            textColor: [255, 255, 255],
+            fontSize: 9,
+          },
+          bodyStyles: { fontSize: 9 },
+          columnStyles: { 0: { cellWidth: 34 }, 1: { cellWidth: 'auto' } },
+        });
+        y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+      }
+    }
+
     // ---- Phần II: Trả lời ngắn ----
     if ((exam.shortAnswerQuestions?.length ?? 0) > 0) {
       ensureSpace(14);
@@ -324,7 +568,8 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
       doc.text(`Số câu: ${exam.shortAnswerQuestions.length}`, margin, y);
       y += 6;
 
-      exam.shortAnswerQuestions.forEach((q, qi) => {
+      for (let qi = 0; qi < exam.shortAnswerQuestions.length; qi += 1) {
+        const q = exam.shortAnswerQuestions[qi];
         ensureSpace(14);
 
         doc.setFont(FONT_FAMILY, 'bold');
@@ -339,11 +584,9 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
           y += 1;
         }
 
+        // Ảnh đề/hình minh họa của câu — nhúng thẳng vào PDF.
         if (q.questionImage) {
-          doc.setFontSize(8);
-          doc.setTextColor(120, 120, 120);
-          doc.text('[Có ảnh đề đính kèm trong hệ thống]', margin, y);
-          y += 5;
+          await embedFigure(q.questionImage);
         }
 
         doc.setFont(FONT_FAMILY, 'bold');
@@ -353,14 +596,25 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
         doc.setTextColor(0, 0, 0);
         y += 5;
 
+        // Biểu thức kiểm chứng của câu tính toán (QC Engine) — ghi để giáo viên đối chiếu.
+        if (q.computation?.expression) {
+          doc.setFont(FONT_FAMILY, 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(120, 120, 120);
+          doc.text(`Biểu thức kiểm chứng: ${q.computation.expression} = ${q.computation.expected}`, margin, y);
+          y += 4;
+          doc.setTextColor(0, 0, 0);
+        }
+
         if (q.rubric) {
           doc.setFont(FONT_FAMILY, 'normal');
           doc.setFontSize(8);
           doc.setTextColor(120, 120, 120);
           writeParagraph(`Rubric: ${q.rubric}`, 8, 0, 4);
         }
+        writeProvenance(q);
         y += 4;
-      });
+      }
     }
 
     // ---- Phần III: Tự luận ----
@@ -377,13 +631,14 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
       doc.text(`Số câu: ${exam.essayQuestions.length}`, margin, y);
 
       y += 6;
-      (exam.essayQuestions ?? []).forEach((q, qi) => {
+      for (let questionIndex = 0; questionIndex < exam.essayQuestions.length; questionIndex += 1) {
+        const q = exam.essayQuestions[questionIndex];
         ensureSpace(14);
 
         doc.setFont(FONT_FAMILY, 'bold');
         doc.setFontSize(10);
         doc.setTextColor(0, 0, 0);
-        doc.text(`${q.questionLabel || `Câu ${qi + 1}`} (${q.points} điểm)`, margin, y);
+        doc.text(`${q.questionLabel || `Câu ${questionIndex + 1}`} (${q.points} điểm)`, margin, y);
         y += 5;
 
         (q.subParts ?? []).forEach((part) => {
@@ -393,12 +648,18 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
           writeParagraph(`   ${part.label}. ${part.content || ''} (${part.points} điểm)`, 9);
         });
 
+        // Hình minh họa của câu tự luận (nếu có).
+        if (q.questionImage) {
+          await embedFigure(q.questionImage);
+        }
+
         doc.setFontSize(8);
         doc.setTextColor(120, 120, 120);
         ensureSpace(5);
         writeParagraph(`Rubric: ${q.rubric || 'Chưa có hướng dẫn chấm điểm'}`, 8, 0, 4);
+        writeProvenance(q);
         y += 2;
-      });
+      }
     }
 
     // Tên file bỏ dấu tiếng Việt để không lỗi khi tải về trên mọi hệ điều hành.

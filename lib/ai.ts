@@ -149,6 +149,9 @@ export type AiExamOptions = {
   calculationCount?: number;
 };
 
+/** Hình minh họa AI vẽ (data URL SVG) — hệ thống chuyển từ đặc tả "figure" trước khi trả về. */
+type FigureSvgDraft = { figureSvg?: unknown };
+
 export type AiMcqDraft = {
   content?: string;
   options?: unknown;
@@ -157,7 +160,7 @@ export type AiMcqDraft = {
   topic?: unknown;
   level?: unknown;
   sourcePages?: unknown;
-};
+} & FigureSvgDraft;
 
 export type AiShortDraft = {
   content?: unknown;
@@ -169,7 +172,7 @@ export type AiShortDraft = {
   topic?: unknown;
   level?: unknown;
   sourcePages?: unknown;
-};
+} & FigureSvgDraft;
 
 export type AiMultiMcqDraft = {
   content?: unknown;
@@ -180,7 +183,7 @@ export type AiMultiMcqDraft = {
   topic?: unknown;
   level?: unknown;
   sourcePages?: unknown;
-};
+} & FigureSvgDraft;
 
 export type AiTrueFalseDraft = {
   content?: unknown;
@@ -190,7 +193,7 @@ export type AiTrueFalseDraft = {
   topic?: unknown;
   level?: unknown;
   sourcePages?: unknown;
-};
+} & FigureSvgDraft;
 
 export type AiFillBlankDraft = {
   content?: unknown;
@@ -200,7 +203,7 @@ export type AiFillBlankDraft = {
   topic?: unknown;
   level?: unknown;
   sourcePages?: unknown;
-};
+} & FigureSvgDraft;
 
 export type AiCalculationDraft = {
   content?: unknown;
@@ -212,7 +215,7 @@ export type AiCalculationDraft = {
   topic?: unknown;
   level?: unknown;
   sourcePages?: unknown;
-};
+} & FigureSvgDraft;
 
 export type AiEssayDraft = {
   content?: unknown;
@@ -222,7 +225,7 @@ export type AiEssayDraft = {
   topic?: unknown;
   level?: unknown;
   sourcePages?: unknown;
-};
+} & FigureSvgDraft;
 
 export type AiExamDraft = {
   title?: unknown;
@@ -266,4 +269,13 @@ export type AiRegenerateRequest = {
 
 export function aiRegenerateQuestion(request: AiRegenerateRequest) {
   return post<{ question: Record<string, unknown> }>({ action: 'regenerate-question', ...request });
+}
+
+/** Yêu cầu AI vẽ hình minh họa (SVG) cho một câu hỏi có sẵn. */
+export function aiGenerateFigure(request: {
+  documents: AiDocumentPayload[];
+  content: string;
+  instruction?: string;
+}) {
+  return post<{ figureSvg: string }>({ action: 'generate-figure', ...request });
 }
