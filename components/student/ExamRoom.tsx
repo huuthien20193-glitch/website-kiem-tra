@@ -318,6 +318,7 @@ export function ExamRoom({
           <button
             type="button"
             onClick={handleExit}
+            aria-label="Thoát phòng thi"
             className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500 transition hover:bg-slate-50"
           >
             <ArrowLeft className="size-4" />
@@ -326,20 +327,20 @@ export function ExamRoom({
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className={cn('hidden rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ring-1 sm:inline-flex', subjectStyle(exam.subject))}>
+              <span className={cn('hidden rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide ring-1 sm:inline-flex', subjectStyle(exam.subject))}>
                 {exam.subject}
               </span>
-              <span className="hidden rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-600/10 sm:inline-flex">
+              <span className="hidden rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-600/10 sm:inline-flex">
                 {gradeLabel(exam.grade)}
               </span>
               {practiceMode ? (
-                <span className="hidden rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1 sm:inline-flex bg-teal-50 text-teal-700 ring-teal-600/10">
+                <span className="hidden rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide ring-1 sm:inline-flex bg-teal-50 text-teal-700 ring-teal-600/10">
                   ÔN TẬP
                 </span>
               ) : null}
-              <h1 className="truncate text-sm font-black text-slate-900 sm:text-base">{exam.title}</h1>
+              <h1 className="truncate text-sm font-bold text-slate-900 sm:text-base">{exam.title}</h1>
             </div>
-            <p className="truncate text-[11px] font-semibold text-slate-400">
+            <p className="truncate text-xs font-semibold text-slate-500">
               {studentName} · {exam.mcqCount} câu TN · {exam.shortAnswerQuestions.length} câu TLN ·{' '}
               {exam.essayQuestions.length} câu TL
             </p>
@@ -347,7 +348,7 @@ export function ExamRoom({
 
           <div
             className={cn(
-              'flex items-center gap-2 rounded-2xl border px-3 py-2 font-mono text-sm font-black tabular-nums sm:text-base',
+              'flex items-center gap-2 rounded-2xl border px-3 py-2 font-mono text-sm font-bold tabular-nums sm:text-base',
               urgent
                 ? 'animate-pulse border-rose-200 bg-rose-50 text-rose-600'
                 : warning
@@ -393,22 +394,22 @@ export function ExamRoom({
 
       <main className="mx-auto grid max-w-7xl gap-6 p-4 pb-16 sm:p-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:p-8">
         <div className="min-w-0 space-y-6">
-          <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-[11px] font-semibold text-emerald-800">
+          <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-xs font-semibold text-emerald-800">
             <Sparkles className="size-4 shrink-0" />
             Bài làm được tự động lưu nháp trên thiết bị này. Nếu lỡ tải lại trang, bạn có thể làm tiếp.
           </div>
 
           {exam.mcqCount > 0 ? (
-            <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
+            <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
                 <div className="flex items-center gap-2.5">
-                  <span className="flex size-8 items-center justify-center rounded-xl bg-emerald-600 text-xs font-black text-white">1</span>
+                  <span className="flex size-8 items-center justify-center rounded-xl bg-emerald-600 text-xs font-bold text-white">1</span>
                   <div>
-                    <h2 className="text-sm font-black text-slate-900">Phần trắc nghiệm</h2>
-                    <p className="text-[11px] font-medium text-slate-400">{exam.mcqPointPerQ} điểm/câu · Chọn một đáp án cho mỗi câu</p>
+                    <h2 className="text-sm font-bold text-slate-900">Phần trắc nghiệm</h2>
+                    <p className="text-xs font-medium text-slate-500">{exam.mcqPointPerQ} điểm/câu · Chọn một đáp án cho mỗi câu</p>
                   </div>
                 </div>
-                <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700">
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
                   Đã trả lời {mcqAnsweredCount}/{exam.mcqCount}
                 </span>
               </div>
@@ -424,14 +425,14 @@ export function ExamRoom({
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={image} alt={`Trang đề ${index + 1}`} className="max-h-[560px] w-full rounded-xl object-contain" />
-                      <span className="absolute right-2 top-2 flex items-center gap-1 rounded-lg bg-slate-950/70 px-2 py-1 text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100">
+                      <span className="absolute right-2 top-2 flex items-center gap-1 rounded-lg bg-slate-950/70 px-2 py-1 text-xs font-bold text-white opacity-0 transition group-hover:opacity-100">
                         <ZoomIn className="size-3" /> Phóng to
                       </span>
                     </button>
                   ))}
                 </div>
               ) : hasTextMcq ? null : (
-                <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] font-semibold text-amber-800">
+                <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-800">
                   <CircleAlert className="mt-0.5 size-4 shrink-0" />
                   Giáo viên chưa đính kèm ảnh đề trắc nghiệm. Hãy làm theo đề được phát và điền đáp án bên dưới.
                 </div>
@@ -450,10 +451,10 @@ export function ExamRoom({
                       )}
                     >
                       <div className="mb-2 flex items-center justify-between">
-                        <span className={cn('text-xs font-black', answered ? 'text-emerald-700' : 'text-slate-700')}>
+                        <span className={cn('text-xs font-bold', answered ? 'text-emerald-700' : 'text-slate-700')}>
                           Câu {questionIndex + 1}
                         </span>
-                        <span className="text-[10px] font-bold text-slate-400">
+                        <span className="text-xs font-bold text-slate-500">
                           {formatNumber(exam.mcqPointPerQ)}đ
                         </span>
                       </div>
@@ -478,8 +479,8 @@ export function ExamRoom({
                               <div className="mt-2 space-y-1">
                                 {textQuestion.options.map((option, optionIndex) =>
                                   option.trim() ? (
-                                    <p key={optionIndex} className="text-[11px] leading-snug text-slate-600">
-                                      <span className="font-black text-slate-700">{OPTION_LABELS[optionIndex]}.</span>{' '}
+                                    <p key={optionIndex} className="text-xs leading-snug text-slate-600">
+                                      <span className="font-bold text-slate-700">{OPTION_LABELS[optionIndex]}.</span>{' '}
                                       {option}
                                     </p>
                                   ) : null,
@@ -500,7 +501,7 @@ export function ExamRoom({
                               type="button"
                               onClick={() => chooseAnswer(questionIndex, optionIndex)}
                               className={cn(
-                                'rounded-xl py-2 text-xs font-black transition disabled:opacity-60 disabled:pointer-events-none',
+                                'rounded-xl py-2 text-xs font-bold transition disabled:opacity-60 disabled:pointer-events-none',
                                 selected
                                   ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25'
                                   : showFeedback && isCorrect
@@ -529,20 +530,20 @@ export function ExamRoom({
           ) : null}
 
           {exam.shortAnswerQuestions.length > 0 ? (
-            <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
+            <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
                 <div className="flex items-center gap-2.5">
-                  <span className="flex size-8 items-center justify-center rounded-xl bg-sky-600 text-xs font-black text-white">
+                  <span className="flex size-8 items-center justify-center rounded-xl bg-sky-600 text-xs font-bold text-white">
                     {shortAnswerSectionNumber}
                   </span>
                   <div>
-                    <h2 className="text-sm font-black text-slate-900">Phần trả lời ngắn</h2>
-                    <p className="text-[11px] font-medium text-slate-400">
+                    <h2 className="text-sm font-bold text-slate-900">Phần trả lời ngắn</h2>
+                    <p className="text-xs font-medium text-slate-500">
                       Điền đáp án ngắn cho từng câu — hệ thống tự chấm ngay khi nộp bài
                     </p>
                   </div>
                 </div>
-                <span className="rounded-full bg-sky-50 px-3 py-1 text-[11px] font-black text-sky-700">
+                <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
                   Đã trả lời {shortAnsweredCount}/{exam.shortAnswerQuestions.length}
                 </span>
               </div>
@@ -564,19 +565,19 @@ export function ExamRoom({
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <span className="flex size-7 items-center justify-center rounded-lg bg-white text-[11px] font-black text-sky-700 shadow-sm ring-1 ring-slate-200">
+                          <span className="flex size-7 items-center justify-center rounded-lg bg-white text-xs font-bold text-sky-700 shadow-sm ring-1 ring-slate-200">
                             {questionIndex + 1}
                           </span>
-                          <h3 className="text-sm font-black text-slate-900">
+                          <h3 className="text-sm font-bold text-slate-900">
                             {question.questionLabel}
                           </h3>
-                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200">
+                          <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
                             {formatNumber(question.points)} điểm
                           </span>
                         </div>
                         <span
                           className={cn(
-                            'text-[10px] font-black',
+                            'text-xs font-bold',
                             value.trim() ? 'text-emerald-600' : 'text-rose-500',
                           )}
                         >
@@ -616,7 +617,7 @@ export function ExamRoom({
                         }
                         placeholder="Nhập câu trả lời ngắn..."
                         autoComplete="off"
-                        className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                        className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:font-medium placeholder:text-slate-500 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
                       />
                     </div>
                   );
@@ -626,16 +627,16 @@ export function ExamRoom({
           ) : null}
 
           {!practiceMode && exam.essayQuestions.length > 0 ? (
-            <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
+            <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
                 <div className="flex items-center gap-2.5">
-                  <span className="flex size-8 items-center justify-center rounded-xl bg-teal-600 text-xs font-black text-white">{essaySectionNumber}</span>
+                  <span className="flex size-8 items-center justify-center rounded-xl bg-teal-600 text-xs font-bold text-white">{essaySectionNumber}</span>
                   <div>
-                    <h2 className="text-sm font-black text-slate-900">Phần tự luận</h2>
-                    <p className="text-[11px] font-medium text-slate-400">Chụp ảnh bài làm và tải lên cho từng câu</p>
+                    <h2 className="text-sm font-bold text-slate-900">Phần tự luận</h2>
+                    <p className="text-xs font-medium text-slate-500">Chụp ảnh bài làm và tải lên cho từng câu</p>
                   </div>
                 </div>
-                <span className="rounded-full bg-teal-50 px-3 py-1 text-[11px] font-black text-teal-700">
+                <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-700">
                   Đã nộp {essayAnsweredCount}/{exam.essayQuestions.length} câu
                 </span>
               </div>
@@ -648,15 +649,15 @@ export function ExamRoom({
                     <div key={key} id={`essay-${questionIndex}`} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <span className="flex size-7 items-center justify-center rounded-lg bg-white text-[11px] font-black text-teal-700 shadow-sm ring-1 ring-slate-200">
+                          <span className="flex size-7 items-center justify-center rounded-lg bg-white text-xs font-bold text-teal-700 shadow-sm ring-1 ring-slate-200">
                             {questionIndex + 1}
                           </span>
-                          <h3 className="text-sm font-black text-slate-900">{question.questionLabel}</h3>
-                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200">
+                          <h3 className="text-sm font-bold text-slate-900">{question.questionLabel}</h3>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
                             {formatNumber(question.points)} điểm
                           </span>
                         </div>
-                        <span className={cn('text-[10px] font-black', images.length > 0 ? 'text-emerald-600' : 'text-rose-500')}>
+                        <span className={cn('text-xs font-bold', images.length > 0 ? 'text-emerald-600' : 'text-rose-500')}>
                           {images.length > 0 ? `Đã nộp ${images.length} ảnh` : 'Chưa nộp ảnh'}
                         </span>
                       </div>
@@ -675,11 +676,11 @@ export function ExamRoom({
                       <div className="mt-3 space-y-1.5">
                         {question.subParts.map((part, partIndex) => (
                           <div key={partIndex} className="flex items-start gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100">
-                            <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-teal-50 text-[10px] font-black uppercase text-teal-700">
+                            <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-teal-50 text-xs font-bold uppercase text-teal-700">
                               {part.label}
                             </span>
                             <p className="min-w-0 flex-1 text-xs font-medium leading-relaxed text-slate-700">{part.content || '—'}</p>
-                            <span className="shrink-0 text-[10px] font-bold text-slate-400">{formatNumber(part.points)}đ</span>
+                            <span className="shrink-0 text-xs font-bold text-slate-500">{formatNumber(part.points)}đ</span>
                           </div>
                         ))}
                       </div>
@@ -734,7 +735,7 @@ export function ExamRoom({
                           <span className="text-xs font-bold text-slate-800">
                             {uploadingKey === key ? 'Đang xử lý ảnh...' : 'Chọn ảnh bài làm hoặc dán Ctrl + V'}
                           </span>
-                          <span className="text-[10px] font-medium text-slate-400">
+                          <span className="text-xs font-medium text-slate-500">
                             Có thể tải nhiều ảnh · Ảnh được tự động nén
                           </span>
                         </label>
@@ -748,32 +749,32 @@ export function ExamRoom({
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-          <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm">
+          <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
-              <h2 className="text-xs font-black uppercase tracking-wide text-slate-500">Tiến độ bài làm</h2>
-              <span className="text-lg font-black text-emerald-600">{percent}%</span>
+              <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">Tiến độ bài làm</h2>
+              <span className="text-lg font-bold text-emerald-600">{percent}%</span>
             </div>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
               <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500" style={{ width: `${percent}%` }} />
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2">
               <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-                <p className="text-base font-black text-slate-800">{mcqAnsweredCount}/{exam.mcqCount}</p>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Trắc nghiệm</p>
+                <p className="text-base font-bold text-slate-800">{mcqAnsweredCount}/{exam.mcqCount}</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Trắc nghiệm</p>
               </div>
               <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-                <p className="text-base font-black text-slate-800">{shortAnsweredCount}/{exam.shortAnswerQuestions.length}</p>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">TL ngắn</p>
+                <p className="text-base font-bold text-slate-800">{shortAnsweredCount}/{exam.shortAnswerQuestions.length}</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">TL ngắn</p>
               </div>
               <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-                <p className="text-base font-black text-slate-800">{essayAnsweredCount}/{exam.essayQuestions.length}</p>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Tự luận</p>
+                <p className="text-base font-bold text-slate-800">{essayAnsweredCount}/{exam.essayQuestions.length}</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Tự luận</p>
               </div>
             </div>
           </section>
 
-          <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm">
-            <h2 className="text-xs font-black uppercase tracking-wide text-slate-500">Phiếu trả lời</h2>
+          <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">Phiếu trả lời</h2>
             <div className="mt-3 grid grid-cols-6 gap-1.5">
               {Array.from({ length: exam.mcqCount }).map((_, index) => {
                 const answered = mcqAnswers[index] !== undefined;
@@ -783,7 +784,7 @@ export function ExamRoom({
                     type="button"
                     onClick={() => document.getElementById(`question-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
                     className={cn(
-                      'flex aspect-square items-center justify-center rounded-lg text-[10px] font-black transition',
+                      'flex aspect-square items-center justify-center rounded-lg text-xs font-bold transition',
                       answered
                         ? 'bg-emerald-600 text-white shadow-sm'
                         : 'bg-slate-100 text-slate-500 hover:bg-slate-200',
@@ -798,7 +799,7 @@ export function ExamRoom({
 
             {exam.shortAnswerQuestions.length > 0 ? (
               <div className="mt-4 border-t border-slate-100 pt-3">
-                <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
                   Câu trả lời ngắn
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -814,7 +815,7 @@ export function ExamRoom({
                             ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                         }
                         className={cn(
-                          'inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-black transition',
+                          'inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold transition',
                           done
                             ? 'bg-sky-600 text-white'
                             : 'bg-slate-100 text-slate-500 hover:bg-slate-200',
@@ -831,7 +832,7 @@ export function ExamRoom({
 
             {!practiceMode && exam.essayQuestions.length > 0 ? (
               <div className="mt-4 border-t border-slate-100 pt-3">
-                <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">Câu tự luận</p>
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Câu tự luận</p>
                 <div className="flex flex-wrap gap-1.5">
                   {exam.essayQuestions.map((question, index) => {
                     const done = (essayImages[String(question.id)] || []).length > 0;
@@ -841,7 +842,7 @@ export function ExamRoom({
                         type="button"
                         onClick={() => document.getElementById(`essay-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
                         className={cn(
-                          'inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-black transition',
+                          'inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold transition',
                           done ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200',
                         )}
                       >
@@ -854,7 +855,7 @@ export function ExamRoom({
               </div>
             ) : null}
 
-            <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-[10px] font-bold text-slate-500">
+            <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
               <span className="flex items-center gap-1.5">
                 <span className="size-2 rounded-full bg-emerald-500" /> Đã làm
               </span>
@@ -874,7 +875,7 @@ export function ExamRoom({
                 <Send className="size-4" />
                 Kết thúc ôn tập
               </button>
-              <p className="text-center text-[10px] font-medium text-slate-400">
+              <p className="text-center text-xs font-medium text-slate-500">
                 Thời gian còn lại: {formatClock(timeLeft)}
               </p>
             </>
@@ -888,7 +889,7 @@ export function ExamRoom({
                 <Send className="size-4" />
                 Nộp bài hoàn tất
               </button>
-              <p className="text-center text-[10px] font-medium text-slate-400">
+              <p className="text-center text-xs font-medium text-slate-500">
                 Thời gian còn lại: {formatClock(timeLeft)}
               </p>
             </>
@@ -898,36 +899,36 @@ export function ExamRoom({
 
       {practiceFinished ? (
         <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/90 p-6 sm:p-12">
-          <div className="max-w-md w-full rounded-3xl border border-white/10 bg-white p-8 text-center shadow-2xl animate-pop-in">
+          <div className="max-w-md w-full rounded-2xl border border-white/10 bg-white p-8 text-center shadow-2xl animate-pop-in">
             <div className="flex size-20 items-center justify-center rounded-full bg-teal-50 text-teal-600 mx-auto mb-6">
               <CheckCircle2 className="size-10" />
             </div>
-            <h2 className="text-2xl font-black text-slate-900 mb-2">Bài ôn tập hoàn tất</h2>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Bài ôn tập hoàn tất</h2>
             <p className="text-sm text-slate-500 mb-6">{exam.title}</p>
             <div className="space-y-3 text-left mb-8">
               <div className="flex justify-between border-b border-slate-100 pb-2">
                 <span className="text-slate-500">Đúng trắc nghiệm</span>
-                <span className="font-black text-emerald-600">
+                <span className="font-bold text-emerald-600">
                   {practiceCorrect.mcq}/{exam.mcqCount}
                 </span>
               </div>
               {exam.shortAnswerQuestions.length > 0 ? (
                 <div className="flex justify-between border-b border-slate-100 pb-2">
                   <span className="text-slate-500">Đúng trả lời ngắn</span>
-                  <span className="font-black text-sky-600">
+                  <span className="font-bold text-sky-600">
                     {practiceCorrect.short}/{exam.shortAnswerQuestions.length}
                   </span>
                 </div>
               ) : null}
               <div className="flex justify-between border-b border-slate-100 pb-2">
                 <span className="text-slate-500">Điểm số</span>
-                <span className="font-black text-slate-900">
+                <span className="font-bold text-slate-900">
                   {formatNumber(practiceScore)} / {formatNumber(exam.totalPoints)} điểm
                 </span>
               </div>
               <div className="flex justify-between pt-2">
                 <span className="text-slate-500">Tỉ lệ chính xác</span>
-                <span className="font-black text-slate-900">
+                <span className="font-bold text-slate-900">
                   {Math.round(
                     ((practiceCorrect.mcq + practiceCorrect.short) /
                       Math.max(exam.mcqCount + exam.shortAnswerQuestions.length, 1)) *

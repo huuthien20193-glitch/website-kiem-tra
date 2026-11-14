@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#0d9488"/>
+    </linearGradient>
+  </defs>
+  <!-- Nền vuông bo góc, gradient emerald → teal đúng tông màu web -->
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- Chữ T của THTEDU -->
+  <path d="M16 18h32v7.5H36V46a4 4 0 0 1-8 0V25.5H16z" fill="#ffffff"/>
+  <!-- Dấu tích: điểm đã làm đúng -->
+  <circle cx="45" cy="43" r="10" fill="#065f46"/>
+  <path d="M40 43l3.4 3.6 7-7.4" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

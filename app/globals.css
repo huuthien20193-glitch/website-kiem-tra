@@ -1,7 +1,10 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: "Segoe UI Variable Text", "Segoe UI", Inter, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  /* Font chính: Be Vietnam Pro do next/font tự host (biến --font-be-vietnam
+     được gắn trên <html> trong app/layout.tsx). Giữ các font dự phòng để
+     web vẫn đọc được nếu font chưa tải xong. */
+  --font-sans: var(--font-be-vietnam), "Segoe UI", Inter, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 

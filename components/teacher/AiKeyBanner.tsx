@@ -38,11 +38,11 @@ export function AiKeyBanner({ reason, onSaved }: AiKeyBannerProps) {
 
   return (
     <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
-      <p className="flex items-center gap-2 text-xs font-black text-amber-900">
+      <p className="flex items-center gap-2 text-xs font-bold text-amber-900">
         <KeyRound className="size-4" />
         {reason === 'invalid' ? 'API key trên máy chủ KHÔNG HỢP LỆ' : 'Chưa có API key Gemini'}
       </p>
-      <p className="mt-1 text-[11px] font-medium text-amber-800">
+      <p className="mt-1 text-xs font-medium text-amber-800">
         Dán API key Gemini của bạn vào đây (lấy miễn phí tại{' '}
         <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="font-bold underline">
           aistudio.google.com/apikey
@@ -67,7 +67,7 @@ export function AiKeyBanner({ reason, onSaved }: AiKeyBannerProps) {
           <button
             type="button"
             onClick={() => setVisible((current) => !current)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-600"
             aria-label={visible ? 'Ẩn key' : 'Hiện key'}
           >
             {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -78,7 +78,7 @@ export function AiKeyBanner({ reason, onSaved }: AiKeyBannerProps) {
           onClick={() => void save()}
           disabled={checking || value.trim().length === 0}
           className={cn(
-            'flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-xs font-black text-white transition hover:bg-amber-700 disabled:opacity-50',
+            'flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-amber-700 disabled:opacity-50',
           )}
         >
           {checking ? <LoaderCircle className="size-4 animate-spin" /> : null}
@@ -86,12 +86,12 @@ export function AiKeyBanner({ reason, onSaved }: AiKeyBannerProps) {
         </button>
       </div>
       {result === 'valid' ? (
-        <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-emerald-700">
+        <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
           <CheckCircle2 className="size-4" /> Key hợp lệ — đã lưu trên trình duyệt này. AI sẵn sàng!
         </p>
       ) : null}
       {result === 'invalid' ? (
-        <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-rose-700">
+        <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-rose-700">
           <CircleAlert className="size-4" /> Key này không dùng được — kiểm tra lại (dán trọn vẹn, không thừa thiếu ký tự).
         </p>
       ) : null}

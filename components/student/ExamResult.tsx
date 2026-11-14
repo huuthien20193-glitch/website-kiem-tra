@@ -57,28 +57,28 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
       </header>
 
       <main className="mx-auto max-w-5xl space-y-5 p-4 pb-16 sm:p-6 lg:p-8">
-        <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 p-6 text-white shadow-xl shadow-emerald-900/20 sm:p-8">
+        <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 p-6 text-white shadow-xl shadow-emerald-900/20 sm:p-8">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold text-emerald-50 ring-1 ring-white/20">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-emerald-50 ring-1 ring-white/20">
                 <CheckCircle2 className="size-3.5" />
                 Đã nộp bài thành công
               </div>
-              <h1 className="mt-3 text-xl font-black sm:text-2xl">{submission.examTitle}</h1>
+              <h1 className="mt-3 text-xl font-bold sm:text-2xl">{submission.examTitle}</h1>
               <p className="mt-1 text-xs font-medium text-emerald-100/90">
                 {submission.studentName} · {submission.studentClass} · {submission.submittedAt}
               </p>
             </div>
 
-            <div className="flex items-center gap-3 rounded-3xl bg-white/10 p-4 ring-1 ring-white/20">
+            <div className="flex items-center gap-3 rounded-2xl bg-white/10 p-4 ring-1 ring-white/20">
               <span className="flex size-14 items-center justify-center rounded-2xl bg-white/15">
                 <Trophy className="size-7" />
               </span>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-100/80">
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-100/80">
                   {pending ? 'Điểm tạm tính' : 'Tổng điểm'}
                 </p>
-                <p className="text-3xl font-black leading-none">
+                <p className="text-3xl font-bold leading-none">
                   {formatNumber(submission.score)}
                   <span className="ml-1 text-sm font-bold text-emerald-100/80">điểm</span>
                 </p>
@@ -95,33 +95,33 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
               { label: 'Trạng thái', value: pending ? 'Chờ chấm' : 'Hoàn tất' },
             ].map((item) => (
               <div key={item.label} className="rounded-2xl bg-white/10 px-3 py-2.5 ring-1 ring-white/10">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-100/70">{item.label}</p>
-                <p className="mt-0.5 text-sm font-black">{item.value}</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-100/70">{item.label}</p>
+                <p className="mt-0.5 text-sm font-bold">{item.value}</p>
               </div>
             ))}
           </div>
 
           {pending ? (
-            <div className="mt-4 flex items-start gap-2 rounded-2xl bg-white/10 px-4 py-3 text-[11px] font-medium text-emerald-50 ring-1 ring-white/10">
+            <div className="mt-4 flex items-start gap-2 rounded-2xl bg-white/10 px-4 py-3 text-xs font-medium text-emerald-50 ring-1 ring-white/10">
               <Clock3 className="mt-0.5 size-4 shrink-0" />
               Phần tự luận đang chờ giáo viên chấm. Điểm tổng sẽ được cập nhật sau khi giáo viên hoàn tất.
             </div>
           ) : null}
         </section>
 
-        <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-2">
               <span className="flex size-8 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
                 <Award className="size-4" />
               </span>
               <div>
-                <h2 className="text-sm font-black text-slate-900">Chi tiết trắc nghiệm</h2>
-                <p className="text-[11px] font-medium text-slate-400">Đáp án đúng màu xanh, câu sai màu đỏ</p>
+                <h2 className="text-sm font-bold text-slate-900">Chi tiết trắc nghiệm</h2>
+                <p className="text-xs font-medium text-slate-500">Đáp án đúng màu xanh, câu sai màu đỏ</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700">
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
                 {correctPercent}% chính xác
               </span>
               {explanationEnabled &&
@@ -130,7 +130,7 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                   type="button"
                   onClick={() => setShowExplanation((current) => !current)}
                   className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-black transition',
+                    'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition',
                     showExplanation
                       ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-300'
                       : 'bg-slate-100 text-slate-600 hover:bg-amber-50 hover:text-amber-800',
@@ -164,18 +164,18 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                         ) : (
                           <CircleX className="size-4 text-rose-500" />
                         )}
-                        <span className="text-xs font-black text-slate-800">Câu {index + 1}</span>
+                        <span className="text-xs font-bold text-slate-800">Câu {index + 1}</span>
                       </div>
                       <div className="text-right">
-                        <p className="text-[11px] font-bold text-slate-600">
+                        <p className="text-xs font-bold text-slate-600">
                           Bạn chọn:{' '}
                           <span className={isCorrect ? 'text-emerald-700' : 'text-rose-600'}>
                             {studentOption !== undefined ? OPTION_LABELS[studentOption] : 'Bỏ trống'}
                           </span>
                         </p>
                         {!isCorrect ? (
-                          <p className="text-[10px] font-semibold text-slate-400">
-                            Đáp án: <span className="font-black text-emerald-700">{OPTION_LABELS[correctOption]}</span>
+                          <p className="text-xs font-semibold text-slate-500">
+                            Đáp án: <span className="font-bold text-emerald-700">{OPTION_LABELS[correctOption]}</span>
                           </p>
                         ) : null}
                       </div>
@@ -183,7 +183,7 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
 
                     {submission.mcqQuestions?.[index] ? (
                       <div className="mt-1.5">
-                        <p className="line-clamp-2 text-[10px] font-semibold leading-snug text-slate-500">
+                        <p className="line-clamp-2 text-xs font-semibold leading-snug text-slate-500">
                           {submission.mcqQuestions[index]!.content}
                         </p>
                       </div>
@@ -192,11 +192,11 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                     {showExplanation && explanationEnabled ? (
                       <div className="mt-2 border-t border-slate-200/70 pt-2">
                         {getExplanation(index)?.text ? (
-                          <p className="whitespace-pre-line text-[10px] font-medium leading-relaxed text-slate-600">
+                          <p className="whitespace-pre-line text-xs font-medium leading-relaxed text-slate-600">
                             {getExplanation(index)?.text}
                           </p>
                         ) : (
-                          <p className="text-[10px] font-medium italic text-slate-400">
+                          <p className="text-xs font-medium italic text-slate-500">
                             Không có lời giải cho câu này.
                           </p>
                         )}
@@ -221,25 +221,25 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
               })}
             </div>
           ) : (
-            <p className="mt-4 text-xs font-medium text-slate-400">Bài thi không có phần trắc nghiệm.</p>
+            <p className="mt-4 text-xs font-medium text-slate-500">Bài thi không có phần trắc nghiệm.</p>
           )}
         </section>
 
         {shortAnswerDetails.length > 0 ? (
-          <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
+          <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
               <div className="flex items-center gap-2">
                 <span className="flex size-8 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
                   <Award className="size-4" />
                 </span>
                 <div>
-                  <h2 className="text-sm font-black text-slate-900">Phần trả lời ngắn</h2>
-                  <p className="text-[11px] font-medium text-slate-400">
+                  <h2 className="text-sm font-bold text-slate-900">Phần trả lời ngắn</h2>
+                  <p className="text-xs font-medium text-slate-500">
                     Hệ thống tự động chấm theo đáp án của giáo viên
                   </p>
                 </div>
               </div>
-              <span className="rounded-full bg-sky-50 px-3 py-1 text-[11px] font-black text-sky-700">
+              <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
                 {formatNumber(shortAnswerScore)}đ
               </span>
             </div>
@@ -264,13 +264,13 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                         ) : (
                           <CircleX className="size-4 text-rose-500" />
                         )}
-                        <span className="text-xs font-black text-slate-800">
+                        <span className="text-xs font-bold text-slate-800">
                           {detail.questionLabel}
                         </span>
                       </div>
                       <span
                         className={cn(
-                          'text-[11px] font-black',
+                          'text-xs font-bold',
                           correct ? 'text-emerald-700' : 'text-rose-600',
                         )}
                       >
@@ -279,14 +279,14 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                     </div>
 
                     {detail.questionContent ? (
-                      <p className="mt-2 text-[11px] font-medium leading-relaxed text-slate-600">
+                      <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">
                         {detail.questionContent}
                       </p>
                     ) : null}
 
                     <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
                       <div className="rounded-xl bg-white/70 px-2.5 py-1.5 ring-1 ring-slate-100">
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
                           Bạn trả lời
                         </p>
                         <p
@@ -300,7 +300,7 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                       </div>
                       {!correct ? (
                         <div className="rounded-xl bg-white/70 px-2.5 py-1.5 ring-1 ring-slate-100">
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
                             Đáp án đúng
                           </p>
                           <p className="mt-0.5 text-xs font-bold text-emerald-700">
@@ -313,11 +313,11 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                     {showExplanation && explanationEnabled ? (
                       <div className="mt-2 border-t border-slate-200/70 pt-2">
                         {detail.explanation?.text ? (
-                          <p className="whitespace-pre-line text-[10px] font-medium leading-relaxed text-slate-600">
+                          <p className="whitespace-pre-line text-xs font-medium leading-relaxed text-slate-600">
                             {detail.explanation.text}
                           </p>
                         ) : (
-                          <p className="text-[10px] font-medium italic text-slate-400">
+                          <p className="text-xs font-medium italic text-slate-500">
                             Không có lời giải cho câu này.
                           </p>
                         )}
@@ -345,10 +345,10 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
         ) : null}
 
         {submission.essayDetails.length > 0 ? (
-          <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
+          <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
             <div className="border-b border-slate-100 pb-4">
-              <h2 className="text-sm font-black text-slate-900">Phần tự luận</h2>
-              <p className="text-[11px] font-medium text-slate-400">
+              <h2 className="text-sm font-bold text-slate-900">Phần tự luận</h2>
+              <p className="text-xs font-medium text-slate-500">
                 {pending ? 'Bài làm đã được gửi tới giáo viên để chấm điểm.' : 'Điểm và nhận xét từ giáo viên.'}
               </p>
             </div>
@@ -358,18 +358,18 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                 <div key={`${detail.questionId}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="flex size-7 items-center justify-center rounded-lg bg-white text-[11px] font-black text-teal-700 shadow-sm ring-1 ring-slate-200">
+                      <span className="flex size-7 items-center justify-center rounded-lg bg-white text-xs font-bold text-teal-700 shadow-sm ring-1 ring-slate-200">
                         {index + 1}
                       </span>
-                      <h3 className="text-sm font-black text-slate-900">{detail.questionLabel}</h3>
+                      <h3 className="text-sm font-bold text-slate-900">{detail.questionLabel}</h3>
                     </div>
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200">
+                    <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
                       {formatNumber(detail.score)}/{formatNumber(detail.maxPoints)} điểm
                     </span>
                   </div>
 
                   {detail.questionContent ? (
-                    <p className="mt-2 text-[11px] font-medium leading-relaxed text-slate-600">{detail.questionContent}</p>
+                    <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">{detail.questionContent}</p>
                   ) : null}
 
                   {detail.studentImages.length > 0 ? (
@@ -387,12 +387,12 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-3 text-[11px] font-semibold text-rose-500">Không có ảnh bài làm cho câu này.</p>
+                    <p className="mt-3 text-xs font-semibold text-rose-500">Không có ảnh bài làm cho câu này.</p>
                   )}
 
                   {detail.comment ? (
                     <div className="mt-3 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-200">
-                      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Nhận xét của giáo viên</p>
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhận xét của giáo viên</p>
                       <p className="mt-0.5 text-xs font-medium leading-relaxed text-slate-700">{detail.comment}</p>
                     </div>
                   ) : null}
@@ -403,12 +403,12 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
         ) : null}
 
         {submission.mcqImages.length > 0 ? (
-          <details className="group rounded-3xl border border-slate-200/80 bg-white shadow-sm">
-            <summary className="cursor-pointer list-none px-5 py-4 text-sm font-black text-slate-700 marker:hidden">
+          <details className="group rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+            <summary className="cursor-pointer list-none px-5 py-4 text-sm font-bold text-slate-700 marker:hidden">
               <span className="flex items-center justify-between gap-2">
                 Xem lại ảnh đề trắc nghiệm
                 <span className="text-xs font-bold text-emerald-600 group-open:hidden">Mở</span>
-                <span className="hidden text-xs font-bold text-slate-400 group-open:inline">Đóng</span>
+                <span className="hidden text-xs font-bold text-slate-500 group-open:inline">Đóng</span>
               </span>
             </summary>
             <div className="space-y-3 border-t border-slate-100 p-4">

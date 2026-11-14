@@ -8,7 +8,6 @@ import {
   FileText,
   GraduationCap,
   LayoutDashboard,
-  LoaderCircle,
   LogOut,
   Menu,
   Plus,
@@ -22,6 +21,7 @@ import { clearSession, getSession, loadDocuments, loadExams, loadSubmissions, sa
 import { cn, formatNumber, isPending } from '@/lib/utils'
 import { downloadCsv } from '@/lib/export'
 import { BrandLogo } from '@/components/ui/Brand'
+import { LoadingBlock } from '@/components/ui'
 import {
   createClient,
   deleteExamFromCloud,
@@ -319,14 +319,7 @@ export default function TeacherDashboard() {
   }
 
   if (!isClient || session.role !== 'TEACHER') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-          <LoaderCircle className="size-5 animate-spin text-emerald-600" />
-          <span className="text-sm font-semibold text-slate-600">Đang tải không gian giáo viên...</span>
-        </div>
-      </div>
-    )
+    return <LoadingBlock label="Đang tải không gian giáo viên..." />
   }
 
   return (
@@ -360,12 +353,12 @@ export default function TeacherDashboard() {
           </div>
 
           <div className="mt-7 flex items-center gap-3 rounded-2xl bg-white/5 p-3 ring-1 ring-white/10">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-xs font-black text-white">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-xs font-bold text-white">
               GV
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-white">{teacherName}</p>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Giáo viên</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-emerald-400">Giáo viên</p>
             </div>
             <Sparkles className="ml-auto size-4 text-emerald-400" />
           </div>
@@ -395,13 +388,13 @@ export default function TeacherDashboard() {
                     <Icon className="size-[18px]" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-bold">{item.label}</span>
-                    <span className={cn('block text-[10px] font-medium', active ? 'text-emerald-100' : 'text-slate-500')}>
+                    <span className="block truncate text-sm font-bold">{item.label}</span>
+                    <span className={cn('block text-xs font-medium', active ? 'text-emerald-100' : 'text-slate-500')}>
                       {item.hint}
                     </span>
                   </span>
                   {item.key === 'submissions' && pendingCount > 0 ? (
-                    <span className="flex size-5 items-center justify-center rounded-full bg-amber-400 text-[10px] font-black text-amber-950">
+                    <span className="flex size-5 items-center justify-center rounded-full bg-amber-400 text-xs font-bold text-amber-950">
                       {pendingCount > 9 ? '9+' : pendingCount}
                     </span>
                   ) : null}
@@ -460,7 +453,7 @@ export default function TeacherDashboard() {
           >
             <Users className="size-5" />
             {pendingCount > 0 ? (
-              <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-amber-400 text-[9px] font-black text-amber-950">
+              <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-amber-400 text-xs font-bold text-amber-950">
                 {pendingCount}
               </span>
             ) : null}

@@ -198,7 +198,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
             <BookOpen className="size-5" />
           </span>
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Tài liệu học tập</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Tài liệu học tập</h1>
             <p className="text-sm text-slate-500">
               Tải tài liệu lên — AI đọc và dùng chúng để soạn đề kiểm tra trong tab “Tạo đề kiểm tra”.
             </p>
@@ -217,7 +217,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
       ) : null}
 
       {/* Khu tải tài liệu lên */}
-      <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
         <div
           role="button"
           tabIndex={0}
@@ -259,18 +259,18 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
           <p className="mt-3 text-sm font-bold text-slate-800">
             {uploading ? 'Đang đọc tài liệu...' : 'Kéo thả hoặc chọn tệp tài liệu'}
           </p>
-          <p className="mt-1 text-[11px] font-medium text-slate-400">
+          <p className="mt-1 text-xs font-medium text-slate-500">
             PDF · Word (.docx) · TXT/MD · Ảnh chụp đề hoặc bài giảng — AI đọc được cả ảnh scan
           </p>
         </div>
       </section>
 
       {/* Danh sách tài liệu */}
-      <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-black text-slate-900">Tài liệu của bạn ({documents.length})</h2>
+          <h2 className="text-sm font-bold text-slate-900">Tài liệu của bạn ({documents.length})</h2>
           {!hasSupabase ? (
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
               Chỉ lưu trên thiết bị này
             </span>
           ) : null}
@@ -280,7 +280,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 px-4 py-8 text-center">
             <FileText className="mx-auto size-8 text-slate-300" />
             <p className="mt-2 text-xs font-bold text-slate-600">Chưa có tài liệu nào</p>
-            <p className="mt-1 text-[11px] font-medium text-slate-400">
+            <p className="mt-1 text-xs font-medium text-slate-500">
               Tải lên bài giảng, sách giáo khoa hoặc đề thi cũ để AI dựa vào đó soạn đề mới.
             </p>
           </div>
@@ -307,7 +307,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
                       <div className="flex flex-wrap items-center gap-2">
                         <span
                           className={cn(
-                            'rounded-full px-2 py-0.5 text-[10px] font-black ring-1',
+                            'rounded-full px-2 py-0.5 text-xs font-bold ring-1',
                             KIND_BADGES[document.fileType],
                           )}
                         >
@@ -315,7 +315,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
                         </span>
                         <p className="truncate text-sm font-bold text-slate-800">{document.title}</p>
                       </div>
-                      <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                      <p className="mt-0.5 text-xs font-medium text-slate-500">
                         {document.fileName || '—'} · {formatFileSize(document.fileSize)} ·{' '}
                         {document.content.trim()
                           ? `${formatNumber(document.content.trim().split(/\s+/).length)} từ`
@@ -328,7 +328,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
                       <button
                         type="button"
                         onClick={() => setOpenDocId(open ? null : document.id)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-600 transition hover:bg-slate-100"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100"
                       >
                         <Eye className="size-3.5" />
                         {open ? 'Đóng' : 'Nội dung'}
@@ -337,7 +337,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
                         type="button"
                         onClick={() => void handleSummarize(document)}
                         disabled={summarizingId !== null}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3 py-2 text-[11px] font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-60"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-60"
                       >
                         {summarizingId === document.id ? (
                           <LoaderCircle className="size-3.5 animate-spin" />
@@ -349,7 +349,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
                       <button
                         type="button"
                         onClick={() => void handleDelete(document)}
-                        className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-[11px] font-bold text-rose-500 transition hover:bg-rose-100"
+                        className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-bold text-rose-500 transition hover:bg-rose-100"
                       >
                         <Trash2 className="size-3.5" /> Xóa
                       </button>
@@ -360,7 +360,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
                     <div className="border-t border-slate-200 bg-white p-4">
                       {document.summary ? (
                         <div className="mb-3 rounded-xl border border-violet-200 bg-violet-50/60 p-3">
-                          <p className="mb-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-violet-700">
+                          <p className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-violet-700">
                             <Sparkles className="size-3" /> Tóm tắt AI
                           </p>
                           <p className="whitespace-pre-wrap text-xs font-medium leading-relaxed text-slate-700">
@@ -384,7 +384,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
                           />
                         </button>
                       ) : (
-                        <p className="text-xs font-medium text-slate-400">
+                        <p className="text-xs font-medium text-slate-500">
                           Tệp này không trích xuất được chữ. AI vẫn sẽ đọc nội dung gốc khi soạn đề.
                         </p>
                       )}
@@ -398,14 +398,14 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
       </section>
 
       {/* Trợ lý AI hỏi đáp */}
-      <section className="rounded-3xl border border-violet-200/70 bg-white p-5 shadow-sm sm:p-7">
+      <section className="rounded-2xl border border-violet-200/70 bg-white p-5 shadow-sm sm:p-7">
         <div className="mb-4 flex items-center gap-2.5">
           <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white">
             <Bot className="size-4.5" />
           </span>
           <div>
-            <h2 className="text-sm font-black text-slate-900">Hỏi đáp với AI về tài liệu</h2>
-            <p className="text-[11px] font-medium text-slate-400">
+            <h2 className="text-sm font-bold text-slate-900">Hỏi đáp với AI về tài liệu</h2>
+            <p className="text-xs font-medium text-slate-500">
               Ví dụ: “Đề tài liệu này gồm những phần nào?” · “Ra 5 câu hỏi ôn tập từ tài liệu số 2”
             </p>
           </div>
@@ -428,10 +428,10 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
                     })
                   }
                   className={cn(
-                    'max-w-[240px] truncate rounded-full border px-3 py-1 text-[10px] font-bold transition',
+                    'max-w-[240px] truncate rounded-full border px-3 py-1 text-xs font-bold transition',
                     active
                       ? 'border-violet-300 bg-violet-50 text-violet-700'
-                      : 'border-slate-200 bg-slate-50 text-slate-400 hover:text-slate-600',
+                      : 'border-slate-200 bg-slate-50 text-slate-500 hover:text-slate-600',
                   )}
                   title={document.title}
                 >
@@ -448,7 +448,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
           className="max-h-80 min-h-40 space-y-3 overflow-y-auto rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-100"
         >
           {chatMessages.length === 0 ? (
-            <p className="py-6 text-center text-xs font-medium text-slate-400">
+            <p className="py-6 text-center text-xs font-medium text-slate-500">
               Đặt câu hỏi về tài liệu — AI sẽ trả lời dựa trên nội dung bạn đã chọn.
             </p>
           ) : null}
@@ -488,7 +488,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
             }}
             rows={2}
             placeholder="Nhập câu hỏi... (Enter để gửi)"
-            className="flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-500/20"
+            className="flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-500/20"
           />
           <button
             type="button"

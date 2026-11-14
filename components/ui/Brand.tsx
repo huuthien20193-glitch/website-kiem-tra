@@ -35,11 +35,11 @@ export function BrandLogo({
     <div className={cn('flex items-center gap-3', className)}>
       <BrandMark className="size-11" iconClassName="size-6" />
       <div className="min-w-0">
-        <p className={cn('text-lg font-black leading-tight tracking-tight', light ? 'text-white' : 'text-slate-900')}>
+        <p className={cn('text-lg font-bold leading-tight tracking-tight', light ? 'text-white' : 'text-slate-900')}>
           THT<span className="text-emerald-500">EDU</span>exam
         </p>
         {!compact ? (
-          <p className={cn('truncate text-[11px] font-semibold', light ? 'text-slate-400' : 'text-slate-500')}>{subtitle}</p>
+          <p className={cn('truncate text-xs font-semibold', light ? 'text-slate-400' : 'text-slate-500')}>{subtitle}</p>
         ) : null}
       </div>
     </div>

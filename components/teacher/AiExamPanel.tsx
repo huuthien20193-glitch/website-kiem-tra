@@ -125,13 +125,13 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
 
   if (notConfigured) {
     return (
-      <div className="space-y-3 rounded-3xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-sm">
+      <div className="space-y-3 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-sm">
         <div className="flex items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
             <Sparkles className="size-5" />
           </span>
           <div className="text-xs font-semibold text-amber-800">
-            <p className="text-sm font-black text-amber-900">AI soạn đề</p>
+            <p className="text-sm font-bold text-amber-900">AI soạn đề</p>
             <p className="mt-1">
               {keyValid === false
                 ? 'API key Gemini trên máy chủ không hợp lệ. Dán key của bạn vào ô dưới đây để dùng ngay.'
@@ -148,7 +148,7 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
   }
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-violet-200/70 bg-white shadow-sm">
+    <section className="overflow-hidden rounded-2xl border border-violet-200/70 bg-white shadow-sm">
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
@@ -158,8 +158,8 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
           <Sparkles className="size-5" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-black text-white">AI soạn đề từ tài liệu</span>
-          <span className="block text-[11px] font-medium text-violet-100">
+          <span className="block text-sm font-bold text-white">AI soạn đề từ tài liệu</span>
+          <span className="block text-xs font-medium text-violet-100">
             Chọn tài liệu → AI tự viết câu hỏi, đáp án và lời giải điền thẳng vào form bên dưới
           </span>
         </span>
@@ -171,7 +171,7 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
       {open ? (
         <div className="space-y-5 p-5 sm:p-7">
           {aiConfigured === null ? (
-            <p className="flex items-center gap-2 text-xs font-bold text-slate-400">
+            <p className="flex items-center gap-2 text-xs font-bold text-slate-500">
               <LoaderCircle className="size-4 animate-spin" /> Đang kiểm tra kết nối AI...
             </p>
           ) : null}
@@ -179,14 +179,14 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
           {documents.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-violet-300 bg-violet-50/50 px-4 py-5 text-center">
               <p className="text-xs font-bold text-slate-700">Chưa có tài liệu nào</p>
-              <p className="mt-1 text-[11px] font-medium text-slate-500">
+              <p className="mt-1 text-xs font-medium text-slate-500">
                 Hãy vào tab <strong>“Tài liệu học tập”</strong> tải lên bài giảng / SGK / đề cũ trước, sau đó quay lại đây.
               </p>
             </div>
           ) : (
             <>
               <div>
-                <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
                   1. Chọn tài liệu làm nguồn soạn đề
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -210,11 +210,11 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
                             active ? 'border-violet-600 bg-violet-600 text-white' : 'border-slate-300 bg-white',
                           )}
                         >
-                          {active ? <span className="text-[9px] font-black leading-none">✓</span> : null}
+                          {active ? <span className="text-xs font-bold leading-none">✓</span> : null}
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-xs font-bold text-slate-800">{document.title}</span>
-                          <span className="block truncate text-[10px] font-medium text-slate-400">
+                          <span className="block truncate text-xs font-medium text-slate-500">
                             {document.content.trim()
                               ? `${document.content.trim().split(/\s+/).length} từ · ${document.fileName}`
                               : `${document.fileName} · AI đọc trực tiếp nội dung ${document.fileType === 'image' ? 'ảnh' : 'PDF scan'}`}
@@ -227,12 +227,12 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
               </div>
 
               <div>
-                <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
                   2. Cấu hình đề
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <label className="mb-1 block text-[10px] font-bold text-slate-500">Môn học</label>
+                    <label className="mb-1 block text-xs font-bold text-slate-500">Môn học</label>
                     <select
                       value={subject}
                       onChange={(event) => setSubject(event.target.value)}
@@ -246,18 +246,18 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block text-[10px] font-bold text-slate-500">Khối lớp</label>
+                    <label className="mb-1 block text-xs font-bold text-slate-500">Khối lớp</label>
                     <input
                       type="number"
                       min={6}
                       max={12}
                       value={grade}
                       onChange={(event) => setGrade(Number(event.target.value))}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-emerald-700 outline-none focus:border-violet-400 focus:bg-white"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-emerald-700 outline-none focus:border-violet-400 focus:bg-white"
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[10px] font-bold text-slate-500">Độ khó</label>
+                    <label className="mb-1 block text-xs font-bold text-slate-500">Độ khó</label>
                     <select
                       value={difficulty}
                       onChange={(event) => setDifficulty(event.target.value)}
@@ -272,36 +272,36 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="mb-1 block text-[10px] font-bold text-slate-500">TN</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-500">TN</label>
                       <input
                         type="number"
                         min={0}
                         max={40}
                         value={mcqCount}
                         onChange={(event) => setMcqCount(Math.max(0, Number(event.target.value) || 0))}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-black text-slate-700 outline-none focus:border-violet-400 focus:bg-white"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-bold text-slate-700 outline-none focus:border-violet-400 focus:bg-white"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-[10px] font-bold text-slate-500">TLN</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-500">TLN</label>
                       <input
                         type="number"
                         min={0}
                         max={15}
                         value={shortCount}
                         onChange={(event) => setShortCount(Math.max(0, Number(event.target.value) || 0))}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-black text-sky-700 outline-none focus:border-sky-400 focus:bg-white"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-bold text-sky-700 outline-none focus:border-sky-400 focus:bg-white"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-[10px] font-bold text-slate-500">TL</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-500">TL</label>
                       <input
                         type="number"
                         min={0}
                         max={8}
                         value={essayCount}
                         onChange={(event) => setEssayCount(Math.max(0, Number(event.target.value) || 0))}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-black text-amber-700 outline-none focus:border-amber-400 focus:bg-white"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-bold text-amber-700 outline-none focus:border-amber-400 focus:bg-white"
                       />
                     </div>
                   </div>
@@ -309,7 +309,7 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
               </div>
 
               <div>
-                <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
                   3. Yêu cầu thêm (không bắt buộc)
                 </p>
                 <textarea
@@ -317,7 +317,7 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
                   onChange={(event) => setNotes(event.target.value)}
                   rows={2}
                   placeholder="Ví dụ: tập trung vào chương pt bậc 2, tránh trùng các đề trong tài liệu, thêm 2 câu vận dụng cao..."
-                  className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-500/20"
+                  className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-500/20"
                 />
               </div>
 
@@ -332,7 +332,7 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
                 type="button"
                 onClick={() => void generate()}
                 disabled={generating}
-                className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-3.5 text-sm font-black text-white shadow-lg shadow-violet-950/20 transition hover:opacity-95 disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-950/20 transition hover:opacity-95 disabled:opacity-60"
               >
                 {generating ? (
                   <>
@@ -346,7 +346,7 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
                   </>
                 )}
               </button>
-              <p className="text-center text-[10px] font-medium text-slate-400">
+              <p className="text-center text-xs font-medium text-slate-500">
                 Đề do AI soạn sẽ điền vào form bên dưới — bạn nên kiểm tra và chỉnh sửa trước khi công bố cho học sinh.
               </p>
             </>

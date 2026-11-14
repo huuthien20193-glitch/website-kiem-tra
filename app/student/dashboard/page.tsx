@@ -234,13 +234,14 @@ export default function StudentDashboard() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <BrandLogo subtitle="Phòng thi học sinh" />
           <div className="flex items-center gap-2">
-            <span className="hidden items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-600/10 sm:inline-flex">
+            <span className="hidden items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-600/10 sm:inline-flex">
               <GraduationCap className="size-3.5" />
               Học sinh
             </span>
             <button
               type="button"
               onClick={handleLogout}
+              aria-label="Đăng xuất"
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500 transition hover:bg-slate-50 hover:text-rose-600"
             >
               <LogOut className="size-4" />
@@ -257,11 +258,11 @@ export default function StudentDashboard() {
 
           <div className="relative z-10 flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-2xl">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold text-emerald-200 ring-1 ring-white/10">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-emerald-200 ring-1 ring-white/10">
                 <Sparkles className="size-3.5" />
                 Cổng làm bài trực tuyến
               </div>
-              <h1 className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">
+              <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
                 {studentName.trim() ? `Chào ${studentName.trim()},` : 'Chào bạn,'} sẵn sàng làm bài?
               </h1>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-400">
@@ -280,8 +281,8 @@ export default function StudentDashboard() {
                 return (
                   <div key={item.label} className="rounded-2xl bg-white/10 px-3 py-3 ring-1 ring-white/10 sm:px-4">
                     <Icon className="size-4 text-emerald-300" />
-                    <p className="mt-2 text-xl font-black leading-none sm:text-2xl">{item.value}</p>
-                    <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">{item.label}</p>
+                    <p className="mt-2 text-xl font-bold leading-none sm:text-2xl">{item.value}</p>
+                    <p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-400">{item.label}</p>
                   </div>
                 );
               })}
@@ -289,29 +290,29 @@ export default function StudentDashboard() {
           </div>
         </section>
 
-        <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-sm font-black text-slate-900">Thông tin thí sinh</h2>
-              <p className="text-[11px] font-medium text-slate-400">
+              <h2 className="text-sm font-bold text-slate-900">Thông tin thí sinh</h2>
+              <p className="text-xs font-medium text-slate-500">
                 Thông tin được lưu trên thiết bị này để bạn không phải nhập lại.
               </p>
             </div>
-            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-bold text-emerald-700">
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
               <BadgeCheck className="size-3.5" /> Lưu tự động
             </span>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div className="relative">
-              <UserRound className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <UserRound className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
               <input
                 id="student-name"
                 type="text"
                 value={studentName}
                 onChange={(event) => setStudentName(event.target.value)}
                 placeholder="Họ và tên của bạn..."
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm font-semibold text-slate-800 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm font-semibold text-slate-800 outline-none transition placeholder:font-medium placeholder:text-slate-500 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
           </div>
@@ -320,25 +321,25 @@ export default function StudentDashboard() {
         <section className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-lg font-black text-slate-900">Đề thi đang mở</h2>
-              <p className="text-xs font-medium text-slate-400">
+              <h2 className="text-lg font-bold text-slate-900">Đề thi đang mở</h2>
+              <p className="text-xs font-medium text-slate-500">
                 {exams.length > 0 ? `${exams.length} đề sẵn sàng cho bạn lựa chọn` : 'Chưa có đề thi nào được công bố'}
               </p>
             </div>
             <div className="relative w-full sm:w-72">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
               <input
                 type="search"
                 value={keyword}
                 onChange={(event) => setKeyword(event.target.value)}
                 placeholder="Tìm đề thi hoặc môn học..."
-                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-10 text-xs font-medium text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-10 text-xs font-medium text-slate-800 shadow-sm outline-none transition placeholder:text-slate-500 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
               />
               {keyword ? (
                 <button
                   type="button"
                   onClick={() => setKeyword('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-500 hover:bg-slate-100"
                   aria-label="Xóa tìm kiếm"
                 >
                   <X className="size-3.5" />
@@ -398,7 +399,7 @@ export default function StudentDashboard() {
                   {tab.label}
                   <span
                     className={cn(
-                      'rounded-full px-1.5 py-0.5 text-[10px] font-black',
+                      'rounded-full px-1.5 py-0.5 text-xs font-bold',
                       active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500',
                     )}
                   >
@@ -410,15 +411,15 @@ export default function StudentDashboard() {
           </div>
 
           {filteredExams.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-              <span className="flex size-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+              <span className="flex size-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
                 <BookOpen className="size-7" />
               </span>
               <div>
-                <p className="text-sm font-black text-slate-700">
+                <p className="text-sm font-bold text-slate-700">
                   {exams.length === 0 ? 'Chưa có đề thi nào' : 'Không tìm thấy đề phù hợp'}
                 </p>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-slate-500">
                   {exams.length === 0
                     ? 'Vui lòng chờ giáo viên công bố đề kiểm tra.'
                     : 'Thử từ khóa khác hoặc chọn khối lớp khác.'}
@@ -442,49 +443,49 @@ export default function StudentDashboard() {
               {filteredExams.map((exam) => (
                 <article
                   key={exam.id}
-                  className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-900/5"
+                  className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-900/5"
                 >
                   <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 opacity-0 transition group-hover:opacity-100" />
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className={cn('rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ring-1', subjectStyle(exam.subject))}>
+                      <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ring-1', subjectStyle(exam.subject))}>
                         {exam.subject}
                       </span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-600/10">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-600/10">
                         <GraduationCap className="size-3" />
                         {gradeLabel(exam.grade)}
                       </span>
                     </div>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
                       <span className="size-1.5 rounded-full bg-emerald-500" />
                       Đang mở
                     </span>
                   </div>
 
-                  <h3 className="mt-3 line-clamp-2 min-h-[2.75rem] text-base font-black leading-snug text-slate-900">
+                  <h3 className="mt-3 line-clamp-2 min-h-[2.75rem] text-base font-bold leading-snug text-slate-900">
                     {exam.title}
                   </h3>
 
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2">
                       <Timer className="size-3.5 text-emerald-500" />
-                      <span className="text-[11px] font-bold text-slate-600">{exam.durationMinutes} phút</span>
+                      <span className="text-xs font-bold text-slate-600">{exam.durationMinutes} phút</span>
                     </div>
                     <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2">
                       <Trophy className="size-3.5 text-amber-500" />
-                      <span className="text-[11px] font-bold text-slate-600">{formatNumber(exam.totalPoints)} điểm</span>
+                      <span className="text-xs font-bold text-slate-600">{formatNumber(exam.totalPoints)} điểm</span>
                     </div>
                     <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2">
                       <FileText className="size-3.5 text-sky-500" />
-                      <span className="text-[11px] font-bold text-slate-600">{exam.mcqCount} câu TN</span>
+                      <span className="text-xs font-bold text-slate-600">{exam.mcqCount} câu TN</span>
                     </div>
                     <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2">
                       <FileText className="size-3.5 text-cyan-500" />
-                      <span className="text-[11px] font-bold text-slate-600">{exam.shortAnswerQuestions.length} câu TLN</span>
+                      <span className="text-xs font-bold text-slate-600">{exam.shortAnswerQuestions.length} câu TLN</span>
                     </div>
                     <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2">
                       <BookOpen className="size-3.5 text-violet-500" />
-                      <span className="text-[11px] font-bold text-slate-600">{exam.essayQuestions.length} câu TL</span>
+                      <span className="text-xs font-bold text-slate-600">{exam.essayQuestions.length} câu TL</span>
                     </div>
                   </div>
 
@@ -503,15 +504,15 @@ export default function StudentDashboard() {
         </section>
 
         {mySubmissions.length > 0 ? (
-          <section className="rounded-3xl border border-slate-200/80 bg-white shadow-sm">
+          <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
-                <h2 className="text-sm font-black text-slate-900">Kết quả của bạn</h2>
-                <p className="text-[11px] font-medium text-slate-400">
+                <h2 className="text-sm font-bold text-slate-900">Kết quả của bạn</h2>
+                <p className="text-xs font-medium text-slate-500">
                   {studentName}
                 </p>
               </div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
                 {mySubmissions.length} bài nộp
               </span>
             </div>
@@ -521,12 +522,12 @@ export default function StudentDashboard() {
                 const pending = isPending(submission.status);
                 return (
                   <li key={submission.id} className="flex items-center gap-3 px-5 py-4">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 text-[11px] font-black text-white">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 text-xs font-bold text-white">
                       {initials(submission.examTitle)}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-slate-900">{submission.examTitle}</p>
-                      <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] font-semibold text-slate-400">
+                      <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
                         <span>{submission.submittedAt}</span>
                         <span
                           className={cn(
@@ -539,7 +540,7 @@ export default function StudentDashboard() {
                         </span>
                       </p>
                     </div>
-                    <p className="hidden text-base font-black text-emerald-600 sm:block">
+                    <p className="hidden text-base font-bold text-emerald-600 sm:block">
                       {formatNumber(submission.score)}đ
                     </p>
                     <button
@@ -548,7 +549,7 @@ export default function StudentDashboard() {
                         setResult(submission);
                         if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
                       }}
-                      className="shrink-0 rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-600 transition hover:bg-slate-200"
+                      className="shrink-0 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-200"
                     >
                       Xem kết quả
                     </button>
@@ -559,7 +560,7 @@ export default function StudentDashboard() {
           </section>
         ) : null}
 
-        <p className="flex items-center justify-center gap-1.5 pt-2 text-center text-[11px] font-medium text-slate-400">
+        <p className="flex items-center justify-center gap-1.5 pt-2 text-center text-xs font-medium text-slate-500">
           <Inbox className="size-3.5" />
           Bài làm được đồng bộ lên máy chủ và gửi tới giáo viên quản lý lớp.
         </p>

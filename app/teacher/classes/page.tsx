@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   LayoutDashboard,
-  LoaderCircle,
   LogOut,
   Menu,
   Plus,
@@ -15,6 +14,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import { Button, EmptyState, GridSkeleton, LoadingBlock, Modal, PageHeader } from '@/components/ui'
 import type { TeacherClass } from '@/lib/types'
 import { DEFAULT_TEACHER_NAME, SUBJECTS } from '@/lib/types'
 import { cn, formatDate } from '@/lib/utils'
@@ -54,6 +54,8 @@ export default function ClassesPage() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ name: '', code: '', subject: 'Chưa phân loại', studentCount: '0' })
   const [codeTouched, setCodeTouched] = useState(false)
+  /** Focus vào ô "Tên lớp" ngay khi mở modal tạo lớp. */
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   // Tải danh sách lớp: ưu tiên Supabase, dự phòng localStorage khi mất mạng
   // hoặc khi bảng "classes" chưa được tạo trên Supabase.
@@ -185,18 +187,11 @@ export default function ClassesPage() {
 
   // Trang chỉ hiển thị khi đã xác thực trên trình duyệt.
   if (!isClient || session.role !== 'TEACHER') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-          <LoaderCircle className="size-5 animate-spin text-emerald-600" />
-          <span className="text-sm font-semibold text-slate-600">Đang tải trang lớp học...</span>
-        </div>
-      </div>
-    )
+    return <LoadingBlock label="Đang tải trang lớp học..." />
   }
 
   const inputClass =
-    'w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20'
+    'w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-500 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20'
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-700">
@@ -236,7 +231,7 @@ export default function ClassesPage() {
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-white">{teacherName}</p>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Giáo viên</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-emerald-400">Giáo viên</p>
             </div>
             <Sparkles className="ml-auto size-4 text-emerald-400" />
           </div>
@@ -249,8 +244,8 @@ export default function ClassesPage() {
             >
               <LayoutDashboard className="size-[18px]" />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-bold">Tổng quan</span>
-                <span className="block text-[10px] font-medium text-slate-500">Bảng điều khiển</span>
+                <span className="block truncate text-sm font-bold">Tổng quan</span>
+                <span className="block text-xs font-medium text-slate-500">Bảng điều khiển</span>
               </span>
             </button>
             <button
@@ -260,8 +255,8 @@ export default function ClassesPage() {
             >
               <Users className="size-[18px]" />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-bold">Lớp học</span>
-                <span className="block text-[10px] font-medium text-emerald-100">Danh sách lớp</span>
+                <span className="block truncate text-sm font-bold">Lớp học</span>
+                <span className="block text-xs font-medium text-emerald-100">Danh sách lớp</span>
               </span>
             </button>
           </nav>
@@ -304,25 +299,22 @@ export default function ClassesPage() {
         </header>
 
         <main className="mx-auto w-full max-w-[1400px] flex-1 p-4 pb-14 sm:p-6 lg:p-8">
-          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Quản lý lớp học</h1>
-              <p className="mt-1 text-sm text-slate-500">Tạo lớp, tìm kiếm và theo dõi số học sinh của từng lớp.</p>
-            </div>
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-600/25 transition hover:from-emerald-700 hover:to-teal-700 active:scale-[0.98]"
-            >
-              <Plus className="size-4" />
-              Tạo lớp mới
-            </button>
-          </div>
+          <PageHeader
+            className="mb-8"
+            title="Quản lý lớp học"
+            description="Tạo lớp, tìm kiếm và theo dõi số học sinh của từng lớp."
+            actions={
+              <Button size="lg" onClick={openCreateModal}>
+                <Plus className="size-4" aria-hidden="true" />
+                Tạo lớp mới
+              </Button>
+            }
+          />
 
           {/* Ô tìm kiếm theo tên hoặc mã lớp */}
           <div className="rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
               <input
                 type="search"
                 value={search}
@@ -334,49 +326,42 @@ export default function ClassesPage() {
           </div>
 
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-              <LoaderCircle className="size-7 animate-spin text-emerald-500" />
-              <p className="text-sm font-bold text-slate-600">Đang tải danh sách lớp...</p>
+            <div className="mt-6">
+              {/* Skeleton thay cho chữ "Đang tải danh sách lớp..." */}
+              <GridSkeleton count={6} />
             </div>
           ) : filteredClasses.length === 0 ? (
-            <div className="mt-6 flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-20 text-center">
-              <span className="flex size-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
-                <Users className="size-7" />
-              </span>
-              <div>
-                <p className="text-base font-bold text-slate-800">
-                  {classes.length === 0 ? 'Chưa có lớp học nào' : 'Không tìm thấy lớp phù hợp'}
-                </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  {classes.length === 0
-                    ? 'Tạo lớp đầu tiên để sắp xếp học sinh theo từng lớp.'
-                    : 'Thử từ khóa khác hoặc xóa ô tìm kiếm.'}
-                </p>
-              </div>
-              {classes.length === 0 ? (
-                <button
-                  type="button"
-                  onClick={openCreateModal}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-emerald-700"
-                >
-                  <Plus className="size-4" /> Tạo lớp học
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  className="text-sm font-bold text-emerald-700 hover:underline"
-                >
-                  Xóa tìm kiếm
-                </button>
-              )}
-            </div>
+            <EmptyState
+              className="mt-6"
+              icon={Users}
+              title={classes.length === 0 ? 'Chưa có lớp học nào' : 'Không tìm thấy lớp phù hợp'}
+              description={
+                classes.length === 0
+                  ? 'Tạo lớp đầu tiên để sắp xếp học sinh theo từng lớp.'
+                  : 'Thử từ khóa khác hoặc xóa ô tìm kiếm.'
+              }
+              action={
+                classes.length === 0 ? (
+                  <Button onClick={openCreateModal}>
+                    <Plus className="size-4" aria-hidden="true" /> Tạo lớp học
+                  </Button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="text-sm font-bold text-emerald-700 hover:underline"
+                  >
+                    Xóa tìm kiếm
+                  </button>
+                )
+              }
+            />
           ) : (
             <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {filteredClasses.map((cls) => (
                 <article
                   key={cls.id}
-                  className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-900/5"
+                  className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-900/5"
                 >
                   <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 opacity-0 transition group-hover:opacity-100" />
 
@@ -389,7 +374,7 @@ export default function ClassesPage() {
                       onClick={() => handleDeleteClass(cls)}
                       title="Xóa lớp"
                       aria-label={`Xóa lớp ${cls.name}`}
-                      className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                      className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600"
                     >
                       <Trash2 className="size-4" />
                     </button>
@@ -399,11 +384,11 @@ export default function ClassesPage() {
 
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {cls.code ? (
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-600/10">
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-600/10">
                         {cls.code}
                       </span>
                     ) : null}
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-600">
                       {cls.subject}
                     </span>
                   </div>
@@ -421,128 +406,104 @@ export default function ClassesPage() {
         </main>
       </div>
 
-      {/* Modal tạo lớp học */}
-      {modalOpen ? (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-class-title"
-            className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
-              <div>
-                <h2 id="create-class-title" className="text-lg font-bold text-slate-900">
-                  Tạo lớp mới
-                </h2>
-                <p className="mt-0.5 text-xs text-slate-500">Nhập tên lớp — mã lớp sẽ tự gợi ý theo tên.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalOpen(false)}
-                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-                aria-label="Đóng hộp thoại"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            <form
-              onSubmit={(event) => {
-                event.preventDefault()
-                void handleSaveClass()
-              }}
-              className="space-y-4 p-5"
-            >
-              <div>
-                <label htmlFor="class-name" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Tên lớp *
-                </label>
-                <input
-                  id="class-name"
-                  type="text"
-                  required
-                  autoFocus
-                  value={form.name}
-                  onChange={(event) => handleNameChange(event.target.value)}
-                  placeholder="Ví dụ: Toán 9A"
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="class-code" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Mã lớp
-                </label>
-                <input
-                  id="class-code"
-                  type="text"
-                  value={form.code}
-                  onChange={(event) => {
-                    setCodeTouched(true)
-                    setForm((current) => ({ ...current, code: event.target.value }))
-                  }}
-                  placeholder="Ví dụ: TOAN9A"
-                  className={inputClass}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="class-subject" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
-                    Môn học
-                  </label>
-                  <select
-                    id="class-subject"
-                    value={form.subject}
-                    onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))}
-                    className={inputClass}
-                  >
-                    <option value="Chưa phân loại">Chưa phân loại</option>
-                    {SUBJECTS.map((subject) => (
-                      <option key={subject} value={subject}>
-                        {subject}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="class-count" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
-                    Số học sinh
-                  </label>
-                  <input
-                    id="class-count"
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={form.studentCount}
-                    onChange={(event) => setForm((current) => ({ ...current, studentCount: event.target.value }))}
-                    className={inputClass}
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50/70 p-3 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {saving ? <LoaderCircle className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                  Tạo lớp
-                </button>
-              </div>
-            </form>
+      {/* Modal tạo lớp học — dùng Modal dùng chung (Esc, focus trap, a11y đã có sẵn) */}
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Tạo lớp mới"
+        description="Nhập tên lớp — mã lớp sẽ tự gợi ý theo tên."
+        size="sm"
+        initialFocusRef={nameInputRef}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+              Hủy bỏ
+            </Button>
+            {/* type="submit" + form="..." : nút nằm ngoài thẻ form nhưng vẫn submit đúng form theo id */}
+            <Button type="submit" form="create-class-form" loading={saving}>
+              <Plus className="size-4" aria-hidden="true" />
+              Tạo lớp
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="create-class-form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void handleSaveClass()
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <label htmlFor="class-name" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
+              Tên lớp *
+            </label>
+            <input
+              id="class-name"
+              ref={nameInputRef}
+              type="text"
+              required
+              value={form.name}
+              onChange={(event) => handleNameChange(event.target.value)}
+              placeholder="Ví dụ: Toán 9A"
+              className={inputClass}
+            />
           </div>
-        </div>
-      ) : null}
+
+          <div>
+            <label htmlFor="class-code" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
+              Mã lớp
+            </label>
+            <input
+              id="class-code"
+              type="text"
+              value={form.code}
+              onChange={(event) => {
+                setCodeTouched(true)
+                setForm((current) => ({ ...current, code: event.target.value }))
+              }}
+              placeholder="Ví dụ: TOAN9A"
+              className={inputClass}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="class-subject" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                Môn học
+              </label>
+              <select
+                id="class-subject"
+                value={form.subject}
+                onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))}
+                className={inputClass}
+              >
+                <option value="Chưa phân loại">Chưa phân loại</option>
+                {SUBJECTS.map((subject) => (
+                  <option key={subject} value={subject}>
+                    {subject}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="class-count" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                Số học sinh
+              </label>
+              <input
+                id="class-count"
+                type="number"
+                min={0}
+                step={1}
+                value={form.studentCount}
+                onChange={(event) => setForm((current) => ({ ...current, studentCount: event.target.value }))}
+                className={inputClass}
+              />
+            </div>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }

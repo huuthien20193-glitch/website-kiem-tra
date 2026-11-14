@@ -75,11 +75,11 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
     <div className="space-y-7 animate-fade-up">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-600/10">
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-600/10">
             <Sparkles className="size-3.5" />
             {todayLabel()}
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             Xin chào, {teacherName} 👋
           </h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -104,7 +104,7 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
               key={stat.label}
               type="button"
               onClick={stat.onClick}
-              className="group rounded-3xl border border-slate-200/80 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-900/5"
+              className="group rounded-2xl border border-slate-200/80 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-900/5"
             >
               <div className="flex items-start justify-between gap-3">
                 <span className={cn('flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-md', stat.tone)}>
@@ -112,20 +112,20 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
                 </span>
                 <ArrowRight className="size-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-emerald-500" />
               </div>
-              <p className="mt-4 text-2xl font-black tracking-tight text-slate-900">{stat.value}</p>
+              <p className="mt-4 text-2xl font-bold tracking-tight text-slate-900">{stat.value}</p>
               <p className="text-sm font-semibold text-slate-600">{stat.label}</p>
-              <p className="mt-1 text-[11px] font-medium text-slate-400">{stat.hint}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">{stat.hint}</p>
             </button>
           );
         })}
       </div>
 
       <div className="grid gap-6 xl:grid-cols-5">
-        <section className="rounded-3xl border border-slate-200/80 bg-white shadow-sm xl:col-span-3">
+        <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm xl:col-span-3">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
             <div>
-              <h2 className="text-sm font-black text-slate-900">Bài nộp gần đây</h2>
-              <p className="text-[11px] font-medium text-slate-400">Danh sách học sinh vừa hoàn thành bài thi</p>
+              <h2 className="text-sm font-bold text-slate-900">Bài nộp gần đây</h2>
+              <p className="text-xs font-medium text-slate-500">Danh sách học sinh vừa hoàn thành bài thi</p>
             </div>
             <button
               type="button"
@@ -139,12 +139,12 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
 
           {recentSubmissions.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
-              <span className="flex size-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+              <span className="flex size-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
                 <Inbox className="size-6" />
               </span>
               <div>
                 <p className="text-sm font-bold text-slate-700">Chưa có bài nộp nào</p>
-                <p className="mt-1 text-xs text-slate-400">Khi học sinh nộp bài, kết quả sẽ xuất hiện tại đây.</p>
+                <p className="mt-1 text-xs text-slate-500">Khi học sinh nộp bài, kết quả sẽ xuất hiện tại đây.</p>
               </div>
             </div>
           ) : (
@@ -153,18 +153,18 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
                 const pendingSubmission = isPending(submission.status);
                 return (
                   <li key={submission.id} className="flex items-center gap-3 px-5 py-4 transition hover:bg-slate-50/70 sm:px-6">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 text-xs font-black text-white">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 text-xs font-bold text-white">
                       {initials(submission.studentName)}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-slate-900">{submission.studentName}</p>
-                      <p className="truncate text-[11px] font-medium text-slate-400">
+                      <p className="truncate text-xs font-medium text-slate-500">
                         {submission.studentClass} · {submission.examTitle}
                       </p>
                     </div>
                     <div className="hidden text-right sm:block">
-                      <p className="text-sm font-black text-emerald-600">{formatNumber(submission.score)}đ</p>
-                      <p className={cn('text-[10px] font-bold', pendingSubmission ? 'text-amber-600' : 'text-emerald-600')}>
+                      <p className="text-sm font-bold text-emerald-600">{formatNumber(submission.score)}đ</p>
+                      <p className={cn('text-xs font-bold', pendingSubmission ? 'text-amber-600' : 'text-emerald-600')}>
                         {pendingSubmission ? 'Chờ chấm' : 'Hoàn tất'}
                       </p>
                     </div>
@@ -172,7 +172,7 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
                       type="button"
                       onClick={() => onGrade(submission)}
                       className={cn(
-                        'shrink-0 rounded-xl px-3 py-2 text-[11px] font-bold transition',
+                        'shrink-0 rounded-xl px-3 py-2 text-xs font-bold transition',
                         pendingSubmission
                           ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20 hover:bg-emerald-700'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
@@ -188,11 +188,11 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
         </section>
 
         <div className="space-y-6 xl:col-span-2">
-          <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-black text-slate-900">Tiến độ chấm bài</h2>
-                <p className="text-[11px] font-medium text-slate-400">Tự luận cần giáo viên xử lý</p>
+                <h2 className="text-sm font-bold text-slate-900">Tiến độ chấm bài</h2>
+                <p className="text-xs font-medium text-slate-500">Tự luận cần giáo viên xử lý</p>
               </div>
               <span className="flex size-10 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
                 <Award className="size-5" />
@@ -200,8 +200,8 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
             </div>
 
             <div className="mt-5 flex items-end justify-between">
-              <p className="text-3xl font-black text-slate-900">{gradedPercent}%</p>
-              <p className="pb-1 text-xs font-semibold text-slate-400">
+              <p className="text-3xl font-bold text-slate-900">{gradedPercent}%</p>
+              <p className="pb-1 text-xs font-semibold text-slate-500">
                 {graded}/{submissions.length || 0} bài
               </p>
             </div>
@@ -214,24 +214,24 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
 
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-2xl bg-amber-50 p-3">
-                <p className="text-lg font-black text-amber-700">{pending.length}</p>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600">Chờ chấm</p>
+                <p className="text-lg font-bold text-amber-700">{pending.length}</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-600">Chờ chấm</p>
               </div>
               <div className="rounded-2xl bg-emerald-50 p-3">
-                <p className="text-lg font-black text-emerald-700">{graded}</p>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Hoàn tất</p>
+                <p className="text-lg font-bold text-emerald-700">{graded}</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Hoàn tất</p>
               </div>
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-sm">
+          <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <h2 className="text-sm font-black text-slate-900">Đề kiểm tra gần đây</h2>
+              <h2 className="text-sm font-bold text-slate-900">Đề kiểm tra gần đây</h2>
               <Users className="size-4 text-slate-300" />
             </div>
             {recentExams.length === 0 ? (
               <div className="px-5 py-8 text-center">
-                <p className="text-xs font-semibold text-slate-400">Chưa có đề kiểm tra nào.</p>
+                <p className="text-xs font-semibold text-slate-500">Chưa có đề kiểm tra nào.</p>
                 <button
                   type="button"
                   onClick={() => onNavigate('create-exam')}
@@ -254,7 +254,7 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-bold text-slate-800">{exam.title}</span>
-                        <span className="mt-0.5 flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">
+                        <span className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
                           <span className={cn('rounded-full px-1.5 py-0.5 ring-1', subjectStyle(exam.subject))}>{exam.subject}</span>
                           <span>· {gradeLabel(exam.grade)}</span>
                           <span>· {exam.durationMinutes} phút</span>

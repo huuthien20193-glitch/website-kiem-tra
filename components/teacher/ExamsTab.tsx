@@ -410,7 +410,7 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
     <div className="space-y-6 animate-fade-up">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             Quản lý đề kiểm tra
           </h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -429,19 +429,19 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
 
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
           <input
             type="search"
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             placeholder="Tìm theo tên đề hoặc môn học..."
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-500 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
           />
           {keyword ? (
             <button
               type="button"
               onClick={() => setKeyword('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-500 hover:bg-slate-100"
               aria-label="Xóa tìm kiếm"
             >
               <X className="size-3.5" />
@@ -461,17 +461,17 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
           ))}
         </select>
         <div className="relative sm:w-64">
-          <Building2 className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <Building2 className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
             value={schoolName}
             onChange={(event) => handleSchoolNameChange(event.target.value)}
             placeholder="Tên trường in trên PDF..."
             aria-label="Tên trường in đầu trang khi xuất PDF"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-500 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
           />
         </div>
-        <span className="rounded-xl bg-emerald-50 px-3 py-2 text-center text-[11px] font-bold text-emerald-700">
+        <span className="rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-bold text-emerald-700">
           {filtered.length}/{exams.length} đề
         </span>
       </div>
@@ -500,7 +500,7 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
               {tab.label}
               <span
                 className={cn(
-                  'rounded-full px-1.5 py-0.5 text-[10px] font-black',
+                  'rounded-full px-1.5 py-0.5 text-xs font-bold',
                   active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500',
                 )}
               >
@@ -512,15 +512,15 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
       </div>
 
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-20 text-center">
-          <span className="flex size-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
+        <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-20 text-center">
+          <span className="flex size-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
             <Layers className="size-7" />
           </span>
           <div>
-            <p className="text-base font-black text-slate-800">
+            <p className="text-base font-bold text-slate-800">
               {exams.length === 0 ? 'Chưa có đề kiểm tra nào' : 'Không tìm thấy đề phù hợp'}
             </p>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-slate-500">
               {exams.length === 0
                 ? 'Tạo đề đầu tiên để học sinh có thể bắt đầu làm bài.'
                 : 'Thử từ khóa khác hoặc bỏ bộ lọc môn học / khối lớp.'}
@@ -553,18 +553,18 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
           {filtered.map((exam) => (
             <article
               key={exam.id}
-              className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-900/5"
+              className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-900/5"
             >
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 opacity-0 transition group-hover:opacity-100" />
 
               <div className="flex items-start justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className={cn('rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ring-1', subjectStyle(exam.subject))}>
+                  <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ring-1', subjectStyle(exam.subject))}>
                     {exam.subject}
                   </span>
                   <label
-                    className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-600/10"
-                    title="Đổi khối lớp"
+                    className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-600/10"
+                    title="Đổi khối lớp" aria-label="Đổi khối lớp"
                   >
                     <GraduationCap className="size-3 shrink-0" />
                     <select
@@ -575,7 +575,7 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
                           void onUpdateGrade(exam, value as Grade);
                         }
                       }}
-                      className="cursor-pointer bg-transparent text-[10px] font-black uppercase tracking-wide text-indigo-700 outline-none"
+                      className="cursor-pointer bg-transparent text-xs font-bold uppercase tracking-wide text-indigo-700 outline-none"
                       aria-label="Khối lớp của đề"
                     >
                       <option value="" disabled>
@@ -593,8 +593,8 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
                   <button
                     type="button"
                     onClick={() => onDuplicate(exam)}
-                    title="Nhân bản đề"
-                    className="rounded-lg p-2 text-slate-400 transition hover:bg-emerald-50 hover:text-emerald-600"
+                    title="Nhân bản đề" aria-label="Nhân bản đề"
+                    className="rounded-lg p-2 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-600"
                   >
                     <Copy className="size-4" />
                   </button>
@@ -610,62 +610,62 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
                         );
                       });
                     }}
-                    title="Xuất PDF"
-                    className="rounded-lg p-2 text-slate-400 transition hover:bg-amber-50 hover:text-amber-600"
+                    title="Xuất PDF" aria-label="Xuất PDF"
+                    className="rounded-lg p-2 text-slate-500 transition hover:bg-amber-50 hover:text-amber-600"
                   >
                     <Download className="size-4" />
                   </button>
                   <button
                     type="button"
                     onClick={() => onDelete(exam)}
-                    title="Xóa đề"
-                    className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                    title="Xóa đề" aria-label="Xóa đề"
+                    className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600"
                   >
                     <Trash2 className="size-4" />
                   </button>
                 </div>
               </div>
 
-              <h3 className="mt-3 line-clamp-2 min-h-[2.75rem] text-base font-black leading-snug text-slate-900">
+              <h3 className="mt-3 line-clamp-2 min-h-[2.75rem] text-base font-bold leading-snug text-slate-900">
                 {exam.title}
               </h3>
 
               <div className="mt-4 grid grid-cols-4 divide-x divide-slate-100 rounded-2xl bg-slate-50 py-3 text-center">
                 <div>
-                  <p className="flex items-center justify-center gap-1 text-sm font-black text-slate-800">
+                  <p className="flex items-center justify-center gap-1 text-sm font-bold text-slate-800">
                     <Clock3 className="size-3.5 text-emerald-500" />
                     {exam.durationMinutes}
                   </p>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Phút</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Phút</p>
                 </div>
                 <div>
-                  <p className="flex items-center justify-center gap-1 text-sm font-black text-slate-800">
+                  <p className="flex items-center justify-center gap-1 text-sm font-bold text-slate-800">
                     <Layers className="size-3.5 text-sky-500" />
                     {exam.mcqCount}
                   </p>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Trắc nghiệm</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Trắc nghiệm</p>
                 </div>
                 <div>
-                  <p className="flex items-center justify-center gap-1 text-sm font-black text-slate-800">
+                  <p className="flex items-center justify-center gap-1 text-sm font-bold text-slate-800">
                     <Layers className="size-3.5 text-cyan-500" />
                     {exam.shortAnswerQuestions.length}
                   </p>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">TL ngắn</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">TL ngắn</p>
                 </div>
                 <div>
-                  <p className="flex items-center justify-center gap-1 text-sm font-black text-slate-800">
+                  <p className="flex items-center justify-center gap-1 text-sm font-bold text-slate-800">
                     <Layers className="size-3.5 text-violet-500" />
                     {exam.essayQuestions.length}
                   </p>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Tự luận</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Tự luận</p>
                 </div>
               </div>
 
               <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                <span className="text-[11px] font-semibold text-slate-400">
+                <span className="text-xs font-semibold text-slate-500">
                   {exam.createdAt ? `Tạo ngày ${formatDate(exam.createdAt)}` : 'Đề kiểm tra'}
                 </span>
-                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">
+                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
                   {formatNumber(exam.totalPoints)} điểm
                 </span>
               </div>

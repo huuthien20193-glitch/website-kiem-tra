@@ -79,7 +79,7 @@ const createEmptyShortAnswer = (index: number): ShortAnswerQuestion => ({
 
 function NumberBadge({ children }: { children: ReactNode }) {
   return (
-    <span className="flex size-7 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-xs font-black text-white shadow-sm">
+    <span className="flex size-7 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-xs font-bold text-white shadow-sm">
       {children}
     </span>
   );
@@ -655,7 +655,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
     <div className="space-y-6 animate-fade-up">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Tạo đề kiểm tra mới</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Tạo đề kiểm tra mới</h1>
           <p className="mt-1 text-sm text-slate-500">
             Linh hoạt trắc nghiệm, trả lời ngắn và tự luận — có thể bỏ hẳn phần trắc nghiệm nếu muốn.
           </p>
@@ -684,18 +684,18 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         />
 
         {/* STEP 1 */}
-        <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
           <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
             <NumberBadge>1</NumberBadge>
             <div>
-              <h2 className="text-sm font-black text-slate-900">Thông tin chung</h2>
-              <p className="text-[11px] font-medium text-slate-400">Tên đề, môn học, thời gian và thang điểm</p>
+              <h2 className="text-sm font-bold text-slate-900">Thông tin chung</h2>
+              <p className="text-xs font-medium text-slate-500">Tên đề, môn học, thời gian và thang điểm</p>
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
             <div className="md:col-span-2">
-              <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wide text-slate-500">
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                 Tên đề kiểm tra <span className="text-rose-500">*</span>
               </label>
               <input
@@ -703,11 +703,11 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 placeholder="Ví dụ: Kiểm tra giữa kì I – Toán 9"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-500 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wide text-slate-500">Môn học</label>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Môn học</label>
               <select
                 value={subject}
                 onChange={(event) => setSubject(event.target.value)}
@@ -723,7 +723,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
           </div>
 
           <div className="mt-4">
-            <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wide text-slate-500">
+            <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">
               <GraduationCap className="size-3.5 text-emerald-500" />
               Khối lớp <span className="text-rose-500">*</span>
             </label>
@@ -734,7 +734,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                   type="button"
                   onClick={() => setGrade(item)}
                   className={cn(
-                    'rounded-2xl border px-3 py-2.5 text-sm font-black transition',
+                    'rounded-2xl border px-3 py-2.5 text-sm font-bold transition',
                     grade === item
                       ? 'border-emerald-300 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-500/20'
                       : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-emerald-200 hover:text-emerald-700',
@@ -744,14 +744,14 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-[11px] font-medium text-slate-400">
+            <p className="mt-1.5 text-xs font-medium text-slate-500">
               Đề sẽ được nhóm theo khối này ở trang quản lý và trang làm bài của học sinh.
             </p>
           </div>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wide text-slate-500">
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                 Thời gian làm bài (phút) <span className="text-rose-500">*</span>
               </label>
               <input
@@ -760,11 +760,11 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                 max={300}
                 value={durationMinutes}
                 onChange={(event) => setDurationMinutes(Number(event.target.value))}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-emerald-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-emerald-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wide text-slate-500">
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                 Loại đề
               </label>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-1 flex gap-1">
@@ -795,7 +795,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wide text-slate-500">
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                 Thang điểm tổng
               </label>
               <input
@@ -804,7 +804,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                 step={0.5}
                 value={totalPoints}
                 onChange={(event) => setTotalPoints(Number(event.target.value))}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-teal-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-teal-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
           </div>
@@ -830,12 +830,12 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         </section>
 
         {/* STEP 2 */}
-        <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
           <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-slate-100 pb-4">
             <NumberBadge>2</NumberBadge>
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-black text-slate-900">Phần trắc nghiệm</h2>
-              <p className="text-[11px] font-medium text-slate-400">
+              <h2 className="text-sm font-bold text-slate-900">Phần trắc nghiệm</h2>
+              <p className="text-xs font-medium text-slate-500">
                 {hasMcq
                   ? 'Tải ảnh đề, soạn câu hỏi văn bản hoặc để AI soạn — rồi chọn đáp án đúng cho từng câu'
                   : 'Đề này không có phần trắc nghiệm'}
@@ -847,7 +847,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
               aria-checked={hasMcq}
               onClick={() => setHasMcq((current) => !current)}
               className={cn(
-                'inline-flex items-center gap-3 rounded-2xl border-2 px-4 py-2.5 text-xs font-black uppercase tracking-wide transition',
+                'inline-flex items-center gap-3 rounded-2xl border-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wide transition',
                 hasMcq
                   ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
                   : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300',
@@ -945,7 +945,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
             <p className="mt-3 text-sm font-bold text-slate-800">
               {uploading ? 'Đang xử lý ảnh...' : 'Kéo thả ảnh, chọn tệp hoặc dán bằng Ctrl + V'}
             </p>
-            <p className="mt-1 text-[11px] font-medium text-slate-400">
+            <p className="mt-1 text-xs font-medium text-slate-500">
               Hỗ trợ nhiều ảnh cùng lúc · Ảnh được tự động nén để tiết kiệm bộ nhớ
             </p>
           </div>
@@ -962,7 +962,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                     className="group relative flex h-36 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-1"
                   >
                     <img src={image} alt={`Trang đề ${index + 1}`} className="max-h-full max-w-full rounded-lg object-contain" />
-                    <span className="absolute bottom-1 left-1 rounded-md bg-slate-950/70 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    <span className="absolute bottom-1 left-1 rounded-md bg-slate-950/70 px-1.5 py-0.5 text-xs font-bold text-white">
                       Trang {index + 1}
                     </span>
                     <button
@@ -981,8 +981,8 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
 
           <div className="mt-6">
             <div className="mb-2 flex items-center justify-between">
-              <label className="text-xs font-black uppercase tracking-wide text-slate-600">Đáp án đúng từng câu</label>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">
+              <label className="text-xs font-bold uppercase tracking-wide text-slate-600">Đáp án đúng từng câu</label>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
                 {mcqCount} câu · {formatNumber(mcqPoints, 2)} điểm
               </span>
             </div>
@@ -999,17 +999,17 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                           : 'Soạn nội dung câu này bằng văn bản'
                       }
                       className={cn(
-                        'flex size-7 shrink-0 items-center justify-center rounded-lg text-[10px] font-black transition',
+                        'flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition',
                         mcqQuestions[index]
                           ? 'bg-violet-600 text-white shadow-sm'
-                          : 'border border-slate-200 bg-white text-slate-400 hover:border-violet-300 hover:text-violet-600',
+                          : 'border border-slate-200 bg-white text-slate-500 hover:border-violet-300 hover:text-violet-600',
                       )}
                     >
                       Aa
                     </button>
-                    <span className="text-xs font-black text-slate-700">Câu {index + 1}</span>
+                    <span className="text-xs font-bold text-slate-700">Câu {index + 1}</span>
                     {mcqQuestions[index] ? (
-                      <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-700">
+                      <span className="rounded bg-violet-100 px-1.5 py-0.5 text-xs font-bold text-violet-700">
                         có nội dung
                       </span>
                     ) : null}
@@ -1027,7 +1027,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                           })
                         }
                         className={cn(
-                          'flex size-7 items-center justify-center rounded-lg text-[11px] font-black transition',
+                          'flex size-7 items-center justify-center rounded-lg text-xs font-bold transition',
                           (mcqAnswers[index] ?? 0) === optionIndex
                             ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
                             : 'border border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:text-emerald-600',
@@ -1047,15 +1047,15 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
             <div className="mt-6 border-t border-slate-100 pt-6">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <label className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-600">
+                  <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-600">
                     <Sparkles className="size-4 text-violet-500" />
                     Nội dung câu hỏi văn bản
                   </label>
-                  <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                  <p className="mt-0.5 text-xs font-medium text-slate-500">
                     Câu có nội dung văn bản sẽ hiển thị trực tiếp cho học sinh, không cần ảnh đề. Đáp án đúng chọn ở bảng phía trên.
                   </p>
                 </div>
-                <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-black text-violet-700">
+                <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700">
                   {mcqQuestions.filter(Boolean).length}/{mcqCount} câu có nội dung
                 </span>
               </div>
@@ -1070,15 +1070,15 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                           onClick={() => setOpenTextQuestion(openTextQuestion === index ? null : index)}
                           className="flex min-w-0 flex-1 items-center gap-2 text-left"
                         >
-                          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-[10px] font-black text-violet-700 ring-1 ring-violet-200">
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-bold text-violet-700 ring-1 ring-violet-200">
                             {index + 1}
                           </span>
-                          <span className="truncate text-[11px] font-bold text-slate-700">
+                          <span className="truncate text-xs font-bold text-slate-700">
                             {question.content.trim() || '(chưa nhập nội dung)'}
                           </span>
                           <ChevronDown
                             className={cn(
-                              'ml-auto size-4 shrink-0 text-slate-400 transition-transform',
+                              'ml-auto size-4 shrink-0 text-slate-500 transition-transform',
                               openTextQuestion === index && 'rotate-180',
                             )}
                           />
@@ -1102,7 +1102,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                             }
                             rows={3}
                             placeholder={`Nội dung câu ${index + 1}... (hỗ trợ nhiều dòng)`}
-                            className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20"
+                            className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20"
                           />
                           <div className="grid gap-2 sm:grid-cols-2">
                             {OPTION_LABELS.map((label, optionIndex) => (
@@ -1116,9 +1116,9 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                                       return next;
                                     })
                                   }
-                                  title="Chọn làm đáp án đúng"
+                                  title="Chọn làm đáp án đúng" aria-label="Chọn làm đáp án đúng"
                                   className={cn(
-                                    'flex size-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-black transition',
+                                    'flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition',
                                     (mcqAnswers[index] ?? 0) === optionIndex
                                       ? 'bg-emerald-600 text-white shadow-sm'
                                       : 'border border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:text-emerald-600',
@@ -1135,7 +1135,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                                     updateMcqQuestion(index, { options });
                                   }}
                                   placeholder={`Nội dung phương án ${label}`}
-                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20"
+                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20"
                                 />
                               </div>
                             ))}
@@ -1152,11 +1152,11 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
           <div className="mt-6 border-t border-slate-100 pt-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <label className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-600">
+                <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-600">
                   <Lightbulb className="size-4 text-amber-500" />
-                  Lời giải từng câu <span className="font-medium normal-case text-slate-400">(tùy chọn)</span>
+                  Lời giải từng câu <span className="font-medium normal-case text-slate-500">(tùy chọn)</span>
                 </label>
-                <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                <p className="mt-0.5 text-xs font-medium text-slate-500">
                   Ghi bằng chữ hoặc ảnh. Bật công tắc để học sinh xem lời giải (trắc nghiệm + trả lời ngắn) sau khi nộp bài và ra điểm.
                 </p>
               </div>
@@ -1166,7 +1166,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                 aria-checked={mcqExplanationEnabled}
                 onClick={() => setMcqExplanationEnabled((current) => !current)}
                 className={cn(
-                  'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-black transition',
+                  'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition',
                   mcqExplanationEnabled
                     ? 'border-amber-300 bg-amber-50 text-amber-800'
                     : 'border-slate-200 bg-slate-50 text-slate-500',
@@ -1206,20 +1206,20 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                       className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition hover:bg-slate-100/60"
                     >
                       <span className="flex min-w-0 items-center gap-2">
-                        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-[10px] font-black text-slate-600 ring-1 ring-slate-200">
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-bold text-slate-600 ring-1 ring-slate-200">
                           {index + 1}
                         </span>
                         <span
                           className={cn(
-                            'text-[11px] font-bold',
-                            hasContent ? 'text-emerald-700' : 'text-slate-400',
+                            'text-xs font-bold',
+                            hasContent ? 'text-emerald-700' : 'text-slate-500',
                           )}
                         >
                           {hasContent ? 'Đã có lời giải' : 'Chưa có lời giải'}
                         </span>
                       </span>
                       <ChevronDown
-                        className={cn('size-4 shrink-0 text-slate-400 transition-transform', open && 'rotate-180')}
+                        className={cn('size-4 shrink-0 text-slate-500 transition-transform', open && 'rotate-180')}
                       />
                     </button>
 
@@ -1230,7 +1230,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                           onChange={(event) => updateExplanation(index, { text: event.target.value })}
                           rows={2}
                           placeholder={`Giải thích tại sao đáp án ${OPTION_LABELS[mcqAnswers[index] ?? 0]} đúng...`}
-                          className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
+                          className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-500 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
                         />
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           <input
@@ -1249,13 +1249,13 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                           <button
                             type="button"
                             onClick={() => explanationInputRefs.current[index]?.click()}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800 transition hover:bg-amber-100"
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-100"
                           >
                             <ImagePlus className="size-4" />
                             Thêm ảnh / dán Ctrl + V
                           </button>
                           {explanation.images.length > 0 ? (
-                            <span className="text-[10px] font-bold text-slate-400">
+                            <span className="text-xs font-bold text-slate-500">
                               {explanation.images.length} ảnh
                             </span>
                           ) : null}
@@ -1304,12 +1304,12 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         </section>
 
         {/* STEP 3 */}
-        <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
           <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
             <NumberBadge>3</NumberBadge>
             <div>
-              <h2 className="text-sm font-black text-slate-900">Phần trả lời ngắn</h2>
-              <p className="text-[11px] font-medium text-slate-400">
+              <h2 className="text-sm font-bold text-slate-900">Phần trả lời ngắn</h2>
+              <p className="text-xs font-medium text-slate-500">
                 Học sinh gõ đáp án trực tiếp — hệ thống tự chấm theo đáp án đúng
               </p>
             </div>
@@ -1319,7 +1319,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
             {shortAnswerQuestions.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 px-4 py-6 text-center">
                 <p className="text-xs font-bold text-slate-600">Chưa có câu trả lời ngắn</p>
-                <p className="mt-1 text-[11px] font-medium text-slate-400">
+                <p className="mt-1 text-xs font-medium text-slate-500">
                   Thêm câu hỏi để học sinh nhập đáp án trực tiếp.
                 </p>
               </div>
@@ -1334,7 +1334,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
               >
                 <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="flex size-8 items-center justify-center rounded-xl bg-white text-xs font-black text-sky-700 shadow-sm ring-1 ring-slate-200">
+                    <span className="flex size-8 items-center justify-center rounded-xl bg-white text-xs font-bold text-sky-700 shadow-sm ring-1 ring-slate-200">
                       {questionIndex + 1}
                     </span>
                     <input
@@ -1344,9 +1344,9 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                         updateShortAnswer(question.id, { questionLabel: event.target.value })
                       }
                       placeholder="Câu 1"
-                      className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-sky-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                      className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-sky-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
                     />
-                    <span className="text-[11px] font-bold text-slate-500">Điểm câu:</span>
+                    <span className="text-xs font-bold text-slate-500">Điểm câu:</span>
                     <input
                       type="number"
                       min={0}
@@ -1355,7 +1355,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                       onChange={(event) =>
                         updateShortAnswer(question.id, { points: Number(event.target.value) })
                       }
-                      className="w-20 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-center text-xs font-black text-sky-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                      className="w-20 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-center text-xs font-bold text-sky-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
                     />
                   </div>
                   <button
@@ -1365,7 +1365,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                         current.filter((item) => item.id !== question.id),
                       )
                     }
-                    className="inline-flex items-center gap-1 self-start rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-rose-500 transition hover:bg-rose-100 sm:self-auto"
+                    className="inline-flex items-center gap-1 self-start rounded-xl px-2.5 py-1.5 text-xs font-bold text-rose-500 transition hover:bg-rose-100 sm:self-auto"
                   >
                     <Trash2 className="size-3.5" /> Xóa câu
                   </button>
@@ -1373,7 +1373,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
 
                 <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
                   <div>
-                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                       Ảnh đề (tùy chọn)
                     </label>
                     <input
@@ -1412,14 +1412,14 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                         className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-sky-300 bg-white text-sky-600 transition hover:border-sky-400 hover:bg-sky-50/50"
                       >
                         <ImagePlus className="size-5" />
-                        <span className="text-[11px] font-bold">Chọn ảnh đề</span>
+                        <span className="text-xs font-bold">Chọn ảnh đề</span>
                       </button>
                     )}
                   </div>
 
                   <div className="space-y-2.5">
                     <div>
-                      <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                         Nội dung câu hỏi
                       </label>
                       <textarea
@@ -1429,11 +1429,11 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                         }
                         rows={2}
                         placeholder="Ví dụ: Tính giá trị của biểu thức..."
-                        className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                        className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-500 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
                       />
                     </div>
                     <div>
-                      <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                         Đáp án đúng <span className="text-rose-500">*</span>
                       </label>
                       <input
@@ -1443,14 +1443,14 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                           updateShortAnswer(question.id, { answer: event.target.value })
                         }
                         placeholder="Ví dụ: 4 | bốn | 2^2 (nhiều đáp án cách nhau bởi | hoặc ;)"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-sky-700 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-sky-700 outline-none transition placeholder:font-medium placeholder:text-slate-500 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
                       />
-                      <p className="mt-1 text-[10px] font-medium text-slate-400">
+                      <p className="mt-1 text-xs font-medium text-slate-500">
                         Không phân biệt hoa thường, tự động chấp nhận 0,5 và 0.5.
                       </p>
                     </div>
                     <div>
-                      <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                         Hướng dẫn chấm (tùy chọn)
                       </label>
                       <input
@@ -1460,14 +1460,14 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                           updateShortAnswer(question.id, { rubric: event.target.value })
                         }
                         placeholder="Ví dụ: Đúng đơn vị mới được tính điểm..."
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-500 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
                       />
                     </div>
                     <div
                       data-paste-short-explanation={String(question.id)}
                       className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3"
                     >
-                      <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-amber-700">
+                      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-amber-700">
                         Lời giải (tùy chọn) — học sinh xem sau khi nộp bài
                       </label>
                       <textarea
@@ -1475,7 +1475,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                         onChange={(event) => updateShortExplanation(question.id, { text: event.target.value })}
                         rows={2}
                         placeholder="Ví dụ: Vì 2² = 4, nên căn bậc hai của 4 là ±2..."
-                        className="w-full resize-y rounded-xl border border-amber-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
+                        className="w-full resize-y rounded-xl border border-amber-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-500 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
                       />
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <input
@@ -1494,13 +1494,13 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                         <button
                           type="button"
                           onClick={() => shortExplanationInputRefs.current[String(question.id)]?.click()}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800 transition hover:bg-amber-100"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-100"
                         >
                           <ImagePlus className="size-4" />
                           Thêm ảnh / dán Ctrl + V
                         </button>
                         {question.explanation?.images && question.explanation.images.length > 0 ? (
-                          <span className="text-[10px] font-bold text-slate-500">
+                          <span className="text-xs font-bold text-slate-500">
                             {question.explanation.images.length} ảnh
                           </span>
                         ) : null}
@@ -1554,12 +1554,12 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         </section>
 
         {/* STEP 4 */}
-        <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
           <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
             <NumberBadge>4</NumberBadge>
             <div>
-              <h2 className="text-sm font-black text-slate-900">Phần tự luận</h2>
-              <p className="text-[11px] font-medium text-slate-400">Chia câu hỏi thành các ý a, b, c... và đặt điểm tương ứng</p>
+              <h2 className="text-sm font-bold text-slate-900">Phần tự luận</h2>
+              <p className="text-xs font-medium text-slate-500">Chia câu hỏi thành các ý a, b, c... và đặt điểm tương ứng</p>
             </div>
           </div>
 
@@ -1576,7 +1576,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                 >
                   <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="flex size-8 items-center justify-center rounded-xl bg-white text-xs font-black text-emerald-700 shadow-sm ring-1 ring-slate-200">
+                      <span className="flex size-8 items-center justify-center rounded-xl bg-white text-xs font-bold text-emerald-700 shadow-sm ring-1 ring-slate-200">
                         {questionIndex + 1}
                       </span>
                       <input
@@ -1584,22 +1584,22 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                         value={question.questionLabel}
                         onChange={(event) => updateEssay(question.id, { questionLabel: event.target.value })}
                         placeholder="Câu 7"
-                        className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-emerald-700 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
+                        className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-emerald-700 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
                       />
-                      <span className="text-[11px] font-bold text-slate-500">Điểm câu:</span>
+                      <span className="text-xs font-bold text-slate-500">Điểm câu:</span>
                       <input
                         type="number"
                         min={0}
                         step={0.25}
                         value={question.points}
                         onChange={(event) => updateEssay(question.id, { points: Number(event.target.value) })}
-                        className="w-20 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-center text-xs font-black text-emerald-700 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
+                        className="w-20 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-center text-xs font-bold text-emerald-700 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
                     <button
                       type="button"
                       onClick={() => setEssayQuestions((current) => current.filter((item) => item.id !== question.id))}
-                      className="inline-flex items-center gap-1 self-start rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-rose-500 transition hover:bg-rose-100 sm:self-auto"
+                      className="inline-flex items-center gap-1 self-start rounded-xl px-2.5 py-1.5 text-xs font-bold text-rose-500 transition hover:bg-rose-100 sm:self-auto"
                     >
                       <Trash2 className="size-3.5" /> Xóa câu
                     </button>
@@ -1607,7 +1607,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
 
                   <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
                     <div>
-                      <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                         Ảnh đề (tùy chọn)
                       </label>
                       <input
@@ -1642,19 +1642,19 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                           className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-teal-300 bg-white text-teal-600 transition hover:border-teal-400 hover:bg-teal-50/50"
                         >
                           <ImagePlus className="size-5" />
-                          <span className="text-[11px] font-bold">Chọn ảnh / dán Ctrl + V</span>
+                          <span className="text-xs font-bold">Chọn ảnh / dán Ctrl + V</span>
                         </button>
                       )}
                     </div>
 
                     <div className="space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-black uppercase tracking-wide text-slate-500">Các ý nhỏ</label>
+                        <label className="text-xs font-bold uppercase tracking-wide text-slate-500">Các ý nhỏ</label>
                         {outOfSync ? (
                           <button
                             type="button"
                             onClick={() => syncQuestionPoints(question.id)}
-                            className="rounded-lg bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-200"
+                            className="rounded-lg bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700 hover:bg-amber-200"
                           >
                             Đồng bộ điểm ý: {formatNumber(subPartTotal, 2)}đ
                           </button>
@@ -1663,7 +1663,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
 
                       {question.subParts.map((part, partIndex) => (
                         <div key={partIndex} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2">
-                          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-[11px] font-black uppercase text-emerald-700">
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-xs font-bold uppercase text-emerald-700">
                             {part.label}
                           </span>
                           <input
@@ -1671,7 +1671,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                             value={part.content}
                             onChange={(event) => updateSubPart(question.id, partIndex, { content: event.target.value })}
                             placeholder={`Nội dung ý ${part.label}...`}
-                            className="min-w-0 flex-1 bg-transparent px-1 py-1 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                            className="min-w-0 flex-1 bg-transparent px-1 py-1 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-500"
                           />
                           <div className="flex shrink-0 items-center gap-1">
                             <input
@@ -1680,13 +1680,13 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                               step={0.25}
                               value={part.points}
                               onChange={(event) => updateSubPart(question.id, partIndex, { points: Number(event.target.value) })}
-                              className="w-14 rounded-lg border border-slate-200 bg-slate-50 px-1 py-1 text-center text-[11px] font-black text-emerald-700 outline-none"
+                              className="w-14 rounded-lg border border-slate-200 bg-slate-50 px-1 py-1 text-center text-xs font-bold text-emerald-700 outline-none"
                             />
-                            <span className="text-[10px] font-bold text-slate-400">đ</span>
+                            <span className="text-xs font-bold text-slate-500">đ</span>
                             <button
                               type="button"
                               onClick={() => removeSubPart(question.id, partIndex)}
-                              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"
+                              className="rounded-lg p-1.5 text-slate-500 transition hover:bg-rose-50 hover:text-rose-500"
                               aria-label="Xóa ý"
                             >
                               <Trash2 className="size-3.5" />
@@ -1698,7 +1698,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                       <button
                         type="button"
                         onClick={() => addSubPart(question.id)}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-[11px] font-bold text-emerald-700 transition hover:bg-emerald-100"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
                       >
                         <Plus className="size-3.5" />
                         Thêm ý {String.fromCharCode(97 + question.subParts.length)}
@@ -1707,7 +1707,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                   </div>
 
                   <div className="mt-4">
-                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                       Hướng dẫn chấm / Rubric
                     </label>
                     <input
@@ -1715,7 +1715,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                       value={question.rubric || ''}
                       onChange={(event) => updateEssay(question.id, { rubric: event.target.value })}
                       placeholder="Ví dụ: Trình bày đúng mỗi ý 1 điểm, thiếu kết luận trừ 0,25 điểm..."
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-500 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
                     />
                   </div>
                 </div>
@@ -1750,17 +1750,17 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         </button>
       ) : null}
 
-      <div className="sticky bottom-4 z-20 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-xl shadow-slate-900/5 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+      <div className="sticky bottom-4 z-20 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-xl shadow-slate-900/5 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <span className="flex size-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
             <Layers className="size-5" />
           </span>
           <div>
-            <p className="text-xs font-black text-slate-800">
+            <p className="text-xs font-bold text-slate-800">
               {effectiveMcqCount} câu trắc nghiệm · {shortAnswerQuestions.length} câu trả lời ngắn ·{' '}
               {essayQuestions.length} câu tự luận
             </p>
-            <p className="text-[11px] font-medium text-slate-400">
+            <p className="text-xs font-medium text-slate-500">
               Tổng điểm cấu hình {formatNumber(configuredPoints, 2)} / {formatNumber(totalPoints, 2)} điểm
             </p>
           </div>

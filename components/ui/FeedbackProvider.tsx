@@ -12,6 +12,9 @@ import {
 } from 'react';
 import { CircleCheck, CircleX, Info, TriangleAlert, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+// Modal + Button dùng chung của dự án (import trực tiếp, tránh vòng lặp qua barrel index).
+import { Modal } from './Modal';
+import { Button } from './Button';
 
 type ToastKind = 'success' | 'error' | 'info' | 'warning';
 
@@ -74,24 +77,21 @@ const TOAST_STYLES: Record<ToastKind, { icon: typeof CircleCheck; wrap: string; 
   },
 };
 
-const CONFIRM_STYLES: Record<ConfirmTone, { icon: typeof TriangleAlert; wrap: string; iconWrap: string; button: string }> = {
+const CONFIRM_STYLES: Record<ConfirmTone, { icon: typeof TriangleAlert; iconWrap: string; buttonVariant: 'danger' | 'warning' | 'primary' }> = {
   danger: {
     icon: TriangleAlert,
-    wrap: 'bg-rose-100 text-rose-600',
     iconWrap: 'bg-rose-100 text-rose-600',
-    button: 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/25',
+    buttonVariant: 'danger',
   },
   warning: {
     icon: TriangleAlert,
-    wrap: 'bg-amber-100 text-amber-600',
     iconWrap: 'bg-amber-100 text-amber-600',
-    button: 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/25',
+    buttonVariant: 'warning',
   },
   primary: {
     icon: Info,
-    wrap: 'bg-emerald-100 text-emerald-600',
     iconWrap: 'bg-emerald-100 text-emerald-600',
-    button: 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25',
+    buttonVariant: 'primary',
   },
 };
 
@@ -156,15 +156,8 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  useEffect(() => {
-    if (!confirmState) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') resolveConfirm(false);
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [confirmState, resolveConfirm]);
-
+  // LƯU Ý: đóng bằng Esc, focus trap và khóa cuộn trang do Modal dùng chung đảm nhiệm
+  // nên không cần lắng nghe phím riêng ở đây nữa.
   return (
     <ToastContext.Provider value={toastApi}>
       <ConfirmContext.Provider value={confirm}>
@@ -195,7 +188,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
                 <button
                   type="button"
                   onClick={() => dismiss(toast.id)}
-                  className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                  className="rounded-lg p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-600"
                   aria-label="Đóng thông báo"
                 >
                   <X className="size-4" />
@@ -206,53 +199,44 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
         </div>
 
         {confirmState ? (
-          <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
-            <div
-              role="alertdialog"
-              aria-modal="true"
-              className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl animate-pop-in"
-            >
-              <div className="flex items-start gap-4 p-6">
-                <span
-                  className={cn(
-                    'flex size-12 shrink-0 items-center justify-center rounded-2xl',
-                    CONFIRM_STYLES[confirmState.options.tone || 'primary'].iconWrap,
-                  )}
-                >
-                  {(() => {
-                    const Icon = CONFIRM_STYLES[confirmState.options.tone || 'primary'].icon;
-                    return <Icon className="size-6" />;
-                  })()}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-lg font-black text-slate-900">{confirmState.options.title}</h2>
-                  {confirmState.options.message ? (
-                    <p className="mt-1.5 text-sm leading-relaxed text-slate-500">{confirmState.options.message}</p>
-                  ) : null}
-                </div>
-              </div>
-              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50/70 p-4 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => resolveConfirm(false)}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
-                >
+          <Modal
+            open
+            onClose={() => resolveConfirm(false)}
+            title={confirmState.options.title}
+            size="sm"
+            headerIcon={
+              <span
+                className={cn(
+                  'flex size-11 items-center justify-center rounded-2xl',
+                  CONFIRM_STYLES[confirmState.options.tone || 'primary'].iconWrap,
+                )}
+              >
+                {(() => {
+                  const Icon = CONFIRM_STYLES[confirmState.options.tone || 'primary'].icon;
+                  return <Icon className="size-5" aria-hidden="true" />;
+                })()}
+              </span>
+            }
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => resolveConfirm(false)}>
                   {confirmState.options.cancelLabel || 'Hủy bỏ'}
-                </button>
-                <button
-                  type="button"
-                  autoFocus
+                </Button>
+                <Button
+                  variant={CONFIRM_STYLES[confirmState.options.tone || 'primary'].buttonVariant}
                   onClick={() => resolveConfirm(true)}
-                  className={cn(
-                    'rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-lg transition',
-                    CONFIRM_STYLES[confirmState.options.tone || 'primary'].button,
-                  )}
                 >
                   {confirmState.options.confirmLabel || 'Xác nhận'}
-                </button>
+                </Button>
+              </>
+            }
+          >
+            {confirmState.options.message ? (
+              <div className="px-5 py-5 sm:px-6">
+                <p className="text-sm leading-relaxed text-slate-600">{confirmState.options.message}</p>
               </div>
-            </div>
-          </div>
+            ) : null}
+          </Modal>
         ) : null}
       </ConfirmContext.Provider>
     </ToastContext.Provider>

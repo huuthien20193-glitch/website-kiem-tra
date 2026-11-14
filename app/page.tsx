@@ -72,7 +72,7 @@ export default function LoginPage() {
   };
 
   const inputClass =
-    'w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 pl-11 pr-4 text-sm font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-500/10';
+    'w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 pl-11 pr-4 text-sm font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-500 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-500/10';
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 font-sans">
@@ -86,11 +86,11 @@ export default function LoginPage() {
           <BrandLogo light subtitle="Sư phạm Tin học · THTEDUexam" />
 
           <div className="max-w-lg">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-[11px] font-bold text-emerald-300">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs font-bold text-emerald-300">
               <Sparkles className="size-3.5" />
               Nền tảng kiểm tra trực tuyến thế hệ mới
             </div>
-            <h1 className="mt-5 text-4xl font-black leading-[1.15] tracking-tight text-white xl:text-[2.9rem]">
+            <h1 className="mt-5 text-4xl font-bold leading-[1.15] tracking-tight text-white xl:text-[2.9rem]">
               Tạo đề nhanh, chấm điểm tự động,{' '}
               <span className="bg-gradient-to-r from-emerald-300 to-teal-200 bg-clip-text text-transparent">
                 quản lý kết quả dễ dàng.
@@ -123,7 +123,7 @@ export default function LoginPage() {
             </ul>
           </div>
 
-          <div className="flex items-center gap-6 text-[11px] font-semibold text-slate-500">
+          <div className="flex items-center gap-6 text-xs font-semibold text-slate-500">
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="size-3.5 text-emerald-400" /> Miễn phí
             </span>
@@ -145,8 +145,8 @@ export default function LoginPage() {
             </div>
 
             <div className="mt-6 space-y-1.5 lg:mt-0">
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-600">Chào mừng trở lại</p>
-              <h2 className="text-2xl font-black tracking-tight text-slate-900">Đăng nhập hệ thống</h2>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-600">Chào mừng trở lại</p>
+              <h2 className="text-2xl font-bold tracking-tight text-slate-900">Đăng nhập hệ thống</h2>
               <p className="text-xs font-medium text-slate-500">Chọn vai trò của bạn để tiếp tục.</p>
             </div>
 
@@ -187,11 +187,11 @@ export default function LoginPage() {
             {role === 'TEACHER' ? (
               <form onSubmit={handleTeacherLogin} autoComplete="off" className="mt-5 space-y-4">
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wide text-slate-500">
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                     Tên đăng nhập
                   </label>
                   <div className="relative">
-                    <User className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                    <User className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
                     <input
                       type="text"
                       required
@@ -205,11 +205,11 @@ export default function LoginPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wide text-slate-500">
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                     Mật khẩu
                   </label>
                   <div className="relative">
-                    <Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                    <Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
                     <input
                       type={showPassword ? 'text' : 'password'}
                       required
@@ -222,7 +222,7 @@ export default function LoginPage() {
                     <button
                       type="button"
                       onClick={() => setShowPassword((current) => !current)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-600"
                       aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                     >
                       {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -252,17 +252,17 @@ export default function LoginPage() {
               <form onSubmit={handleStudentAccess} className="mt-5 space-y-4">
                 <div className="flex items-start gap-3 rounded-2xl border border-teal-100 bg-teal-50 p-3.5">
                   <UserCheck className="mt-0.5 size-4 shrink-0 text-teal-600" />
-                  <p className="text-[11px] leading-relaxed text-teal-800">
+                  <p className="text-xs leading-relaxed text-teal-800">
                     Nhập đúng họ tên để giáo viên có thể đối chiếu kết quả bài làm của bạn.
                   </p>
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wide text-slate-500">
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                     Họ và tên
                   </label>
                   <div className="relative">
-                    <UserRound className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                    <UserRound className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
                     <input
                       type="text"
                       required
@@ -284,7 +284,7 @@ export default function LoginPage() {
               </form>
             )}
 
-            <div className="mt-7 flex items-center justify-center gap-1.5 border-t border-slate-100 pt-5 text-[10px] font-semibold text-slate-400">
+            <div className="mt-7 flex items-center justify-center gap-1.5 border-t border-slate-100 pt-5 text-xs font-semibold text-slate-500">
               <Award className="size-3.5 text-emerald-500" />
               Sư phạm Tin học © 2026 · THTEDUexam
             </div>
