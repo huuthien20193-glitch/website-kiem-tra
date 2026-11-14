@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react'
 import type { Exam, Grade, Submission, TeacherDocument, TeacherTab } from '@/lib/types'
+import { DEFAULT_TEACHER_NAME } from '@/lib/types'
 import { clearSession, getSession, loadDocuments, loadExams, loadSubmissions, saveExams, saveSubmissions } from '@/lib/storage'
 import { cn, formatNumber, isPending } from '@/lib/utils'
 import { downloadCsv } from '@/lib/export'
@@ -62,7 +63,8 @@ export default function TeacherDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [gradingSubmission, setGradingSubmission] = useState<Submission | null>(null)
 
-  const teacherName = session.username || 'Thầy Thiện'
+  // Tên giáo viên lấy từ phiên đăng nhập; chỉ dự phòng bằng hằng số chung khi session rỗng.
+  const teacherName = session.username || DEFAULT_TEACHER_NAME
 
   // Tải danh sách đề thi: ưu tiên Supabase, dự phòng localStorage khi mất mạng.
   const fetchExams = async () => {
@@ -187,6 +189,42 @@ export default function TeacherDashboard() {
     }
 
     toast.success('Đã đổi khối lớp', `${exam.title} → Lớp ${grade}`)
+  }
+
+  // Nhân bản đề: tạo một bản sao với id mới và tên thêm "(bản sao)".
+  // Copy sâu (deep copy) các mảng lồng nhau — nếu chỉ copy tham chiếu thì sửa
+  // câu hỏi của bản sao sẽ làm thay đổi cả đề gốc.
+  const handleDuplicateExam = async (exam: Exam) => {
+    const copy: Exam = {
+      ...exam,
+      id: `exam-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      title: `${exam.title} (bản sao)`,
+      createdAt: new Date().toISOString(),
+      mcqImages: [...exam.mcqImages],
+      mcqQuestions: exam.mcqQuestions?.map((question) =>
+        question ? { ...question, options: [...question.options] } : null,
+      ),
+      mcqExplanations: exam.mcqExplanations?.map((explanation) => ({
+        ...explanation,
+        images: [...explanation.images],
+      })),
+      shortAnswerQuestions: exam.shortAnswerQuestions.map((question) => ({ ...question })),
+      essayQuestions: exam.essayQuestions.map((question) => ({
+        ...question,
+        subParts: question.subParts.map((part) => ({ ...part })),
+      })),
+    }
+
+    const result = await saveExamToCloud(copy)
+    if (!result.ok) {
+      toast.error('Không thể nhân bản đề', result.message ?? 'Vui lòng thử lại.')
+      return
+    }
+
+    const next = [copy, ...exams]
+    setExams(next)
+    saveExams(next)
+    toast.success('Đã nhân bản đề', `Bản sao: ${copy.title}`)
   }
 
   const handleDeleteSubmission = async (id: string) => {
@@ -375,6 +413,14 @@ export default function TeacherDashboard() {
           <div className="mt-4 space-y-2 border-t border-white/10 pt-4">
             <button
               type="button"
+              onClick={() => router.push('/teacher/classes')}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-400 transition hover:bg-white/5 hover:text-white"
+            >
+              <Users className="size-4" />
+              Lớp học
+            </button>
+            <button
+              type="button"
               onClick={() => router.push('/student/dashboard')}
               className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-400 transition hover:bg-white/5 hover:text-white"
             >
@@ -441,9 +487,7 @@ export default function TeacherDashboard() {
               exams={exams}
               onCreate={() => navigate('create-exam')}
               onDelete={handleDeleteExam}
-              onDuplicate={() => {
-                toast.info('Chức năng sắp ra mắt', 'Tính năng nhân bản đề đang được phát triển.')
-              }}
+              onDuplicate={handleDuplicateExam}
               onUpdateGrade={handleUpdateExamGrade}
             />
           ) : null}

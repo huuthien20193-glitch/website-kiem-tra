@@ -80,7 +80,7 @@ export function OverviewTab({ exams, submissions, teacherName, onNavigate, onGra
             {todayLabel()}
           </div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-            Xin chào, {teacherName || 'Thầy Thiện'} 👋
+            Xin chào, {teacherName} 👋
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Quản lý đề kiểm tra, chấm trắc nghiệm tự động và theo dõi kết quả học sinh.

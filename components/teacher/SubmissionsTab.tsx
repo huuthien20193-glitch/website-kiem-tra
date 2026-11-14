@@ -91,7 +91,7 @@ export function SubmissionsTab({
           <button
             type="button"
             onClick={onExport}
-            className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition:hover:bg-emerald-700 active:scale-[0.98]"
+            className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700 active:scale-[0.98]"
           >
             <Download className="size-4" />
             Xuất file điểm
@@ -208,7 +208,8 @@ export function SubmissionsTab({
           </div>
         ) : (
           <>
-            <table className="w-full text-left">
+            {/* Bảng chỉ hiện từ màn hình md trở lên; trên điện thoại dùng danh sách thẻ phía dưới. */}
+            <table className="hidden w-full text-left md:table">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-black uppercase tracking-wide text-slate-400">
                   <th className="px-5 py-3.5">Học sinh</th>
@@ -260,14 +261,14 @@ export function SubmissionsTab({
                         <button
                           type="button"
                           onClick={() => onGrade(submission)}
-                          className="rounded-xl bg-teal-50 px-3 py-2 text-[11px] font-bold text-teal-700 transition:hover:bg-teal-100"
+                          className="rounded-xl bg-teal-50 px-3 py-2 text-[11px] font-bold text-teal-700 transition hover:bg-teal-100"
                         >
                           {isPending(submission.status) ? 'Chấm bài' : 'Xem chi tiết'}
                         </button>
                         <button
                           type="button"
                           onClick={() => onDelete(submission.id)}
-                          className="ml-1 rounded-xl p-2 text-rose-400 transition:hover:bg-rose-50 hover:text-rose-600"
+                          className="ml-1 rounded-xl p-2 text-rose-400 transition hover:bg-rose-50 hover:text-rose-600"
                           aria-label="Xóa bài nộp"
                         >
                           <Trash2 className="size-4" />

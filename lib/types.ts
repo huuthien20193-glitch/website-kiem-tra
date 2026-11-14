@@ -1,5 +1,12 @@
 export type Role = 'TEACHER' | 'STUDENT';
 
+/**
+ * Tên hiển thị khi phiên đăng nhập chưa lưu tên giáo viên.
+ * Chỉ định nghĩa Ở MỘT NƠI này — các component phải lấy tên từ session,
+ * không tự gán cứng "Thầy Thiện" rải rác trong code.
+ */
+export const DEFAULT_TEACHER_NAME = 'Giáo viên';
+
 export type SubPart = {
   label: string;
   content: string;
@@ -70,6 +77,20 @@ export type Exam = {
   mcqExplanations?: McqExplanation[];
   shortAnswerQuestions: ShortAnswerQuestion[];
   essayQuestions: EssayQuestion[];
+  createdAt?: string;
+};
+
+/** Lớp học do giáo viên tạo ở trang /teacher/classes (lưu trên Supabase). */
+export type TeacherClass = {
+  id: string;
+  /** Tên lớp hiển thị, ví dụ "Toán 9A". */
+  name: string;
+  /** Mã lớp ngắn để tìm kiếm nhanh, ví dụ "TOAN9A". */
+  code: string;
+  /** Môn học của lớp (một trong SUBJECTS hoặc "Chưa phân loại"). */
+  subject: string;
+  /** Số học sinh đang theo dõi. Hiện tại chưa có danh sách học sinh riêng. */
+  studentCount: number;
   createdAt?: string;
 };
 

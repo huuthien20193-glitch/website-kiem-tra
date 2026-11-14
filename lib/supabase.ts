@@ -1,5 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
-import type { Exam, Submission, TeacherDocument } from './types'
+import type { Exam, Submission, TeacherClass, TeacherDocument } from './types'
 import { normalizeExam, normalizeSubmission } from './storage'
 
 export function createClient() {
@@ -431,5 +431,83 @@ export async function updateSubmissionInCloud(
     return { ok: false, message: errorMessage(error) }
   }
 
+  return { ok: true }
+}
+
+/* ------------------------------ Lớp học (classes) ------------------------------ */
+
+export type ClassRow = {
+  id: string
+  name?: string | null
+  code?: string | null
+  subject?: string | null
+  student_count?: number | null
+  created_at?: string | null
+}
+
+function mapRowToClass(row: ClassRow): TeacherClass {
+  return {
+    id: String(row.id),
+    name: row.name || 'Lớp chưa đặt tên',
+    code: row.code ?? '',
+    subject: row.subject || 'Chưa phân loại',
+    studentCount: Math.max(0, Math.round(Number(row.student_count ?? 0))),
+    createdAt: row.created_at ?? undefined,
+  }
+}
+
+function classToRow(cls: TeacherClass) {
+  return {
+    id: cls.id,
+    name: cls.name,
+    code: cls.code,
+    subject: cls.subject,
+    student_count: Math.max(0, Math.round(cls.studentCount || 0)),
+    created_at: cls.createdAt ?? new Date().toISOString(),
+  }
+}
+
+export async function fetchClassesFromCloud(): Promise<TeacherClass[] | null> {
+  const supabase = createClient()
+  if (!supabase) return null
+
+  const { data, error } = await supabase
+    .from('classes')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Không thể tải lớp học từ Supabase:', errorMessage(error))
+    return null
+  }
+
+  return (data ?? []).map((row) => mapRowToClass(row as ClassRow))
+}
+
+export async function saveClassToCloud(cls: TeacherClass): Promise<{ ok: boolean; message?: string }> {
+  const supabase = createClient()
+  if (!supabase) {
+    return { ok: false, message: 'Chưa cấu hình NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY.' }
+  }
+
+  const { error } = await supabase.from('classes').upsert(classToRow(cls), { onConflict: 'id' })
+  if (error) {
+    console.error('Không thể lưu lớp học lên Supabase:', errorMessage(error))
+    return { ok: false, message: errorMessage(error) }
+  }
+  return { ok: true }
+}
+
+export async function deleteClassFromCloud(id: string): Promise<{ ok: boolean; message?: string }> {
+  const supabase = createClient()
+  if (!supabase) {
+    return { ok: false, message: 'Chưa cấu hình NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY.' }
+  }
+
+  const { error } = await supabase.from('classes').delete().eq('id', id)
+  if (error) {
+    console.error('Không thể xóa lớp học trên Supabase:', errorMessage(error))
+    return { ok: false, message: errorMessage(error) }
+  }
   return { ok: true }
 }

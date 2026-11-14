@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  Building2,
   Clock3,
   Copy,
   Download,
@@ -12,9 +13,59 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import type { jsPDF } from 'jspdf';
 import type { Exam, Grade } from '@/lib/types';
 import { GRADES, gradeLabel, subjectStyle } from '@/lib/types';
 import { cn, formatDate, formatNumber } from '@/lib/utils';
+import { STORAGE_KEYS, slugify } from '@/lib/storage';
+import { useToast } from '@/components/ui/FeedbackProvider';
+
+/* ----------------------- Font tiếng Việt cho file PDF -----------------------
+ * jsPDF mặc định chỉ có font Helvetica (không hỗ trợ tiếng Việt có dấu).
+ * Ta nhúng font Be Vietnam Pro (đặt trong public/fonts) vào file PDF:
+ *   1. Tải file .ttf từ thư mục public bằng fetch.
+ *   2. Chuyển sang chuỗi base64.
+ *   3. Đăng ký vào jsPDF bằng addFileToVFS + addFont.
+ * Kết quả base64 được lưu trong biến `fontBase64Cache` để lần xuất sau
+ * không phải tải lại từ đầu.
+ * -------------------------------------------------------------------------- */
+const VIETNAMESE_FONTS = [
+  { file: 'BeVietnamPro-Regular.ttf', style: 'normal' as const },
+  { file: 'BeVietnamPro-Bold.ttf', style: 'bold' as const },
+];
+const FONT_FAMILY = 'BeVietnamPro';
+/** null = chưa nạp; true = đã nạp xong. */
+let fontBase64Cache: Record<string, string> | null = null;
+
+/** Đổi một ArrayBuffer thành chuỗi base64 (chia nhỏ để không tràn bộ nhớ). */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const CHUNK = 0x8000; // 32KB mỗi vòng lặp
+  for (let index = 0; index < bytes.length; index += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + CHUNK));
+  }
+  return btoa(binary);
+}
+
+/** Nạp và đăng ký font tiếng Việt vào tài liệu PDF. Nạp lần đầu rồi dùng lại cache. */
+async function ensureVietnameseFonts(doc: jsPDF): Promise<void> {
+  if (!fontBase64Cache) {
+    fontBase64Cache = {};
+    for (const font of VIETNAMESE_FONTS) {
+      const response = await fetch(`/fonts/${font.file}`);
+      if (!response.ok) {
+        fontBase64Cache = null; // nạp lỗi thì reset để lần sau thử lại
+        throw new Error(`Không tải được font ${font.file} (HTTP ${response.status}).`);
+      }
+      fontBase64Cache[font.file] = arrayBufferToBase64(await response.arrayBuffer());
+    }
+  }
+  for (const font of VIETNAMESE_FONTS) {
+    doc.addFileToVFS(font.file, fontBase64Cache[font.file]);
+    doc.addFont(font.file, FONT_FAMILY, font.style);
+  }
+}
 
 type ExamsTabProps = {
   exams: Exam[];
@@ -25,9 +76,27 @@ type ExamsTabProps = {
 };
 
 export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade }: ExamsTabProps) {
+  const toast = useToast();
   const [keyword, setKeyword] = useState('');
   const [subject, setSubject] = useState('all');
   const [gradeFilter, setGradeFilter] = useState<'all' | 'none' | Grade>('all');
+  // Tên trường in đầu trang PDF. Lưu vào localStorage để giáo viên chỉ nhập một lần.
+  const [schoolName, setSchoolName] = useState('');
+
+  useEffect(() => {
+    // Trì hoãn đọc localStorage ra sau khi mount để không setState đồng bộ trong effect.
+    const timer = setTimeout(() => {
+      setSchoolName(window.localStorage.getItem(STORAGE_KEYS.schoolName) || '');
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleSchoolNameChange = (value: string) => {
+    setSchoolName(value);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(STORAGE_KEYS.schoolName, value);
+    }
+  };
 
   const subjects = useMemo(() => Array.from(new Set(exams.map((exam) => exam.subject))).sort(), [exams]);
 
@@ -59,75 +128,157 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
 
   /* ---------- Xuất PDF (client-side) ---------- */
   const exportToPdf = async (exam: Exam) => {
-    const { jsPDF } = await import('jspdf');
+    const { jsPDF: JsPdf } = await import('jspdf');
     const autoTable = await import('jspdf-autotable');
 
-    const doc = new jsPDF('p', 'mm', 'a4');
-    const pageWidth = doc.internal.pageSize.getWidth();
+    const doc = new JsPdf('p', 'mm', 'a4');
+    // Bắt buộc nạp font tiếng Việt trước khi viết bất kỳ chữ nào.
+    await ensureVietnameseFonts(doc);
+
+    const pageWidth = doc.internal.pageSize.getWidth(); // A4 = 210mm
+    const pageHeight = doc.internal.pageSize.getHeight(); // A4 = 297mm
     const margin = 15;
     const contentWidth = pageWidth - margin * 2;
+    const centerX = pageWidth / 2; // tọa độ x dùng để căn giữa chữ
+    const bottomLimit = pageHeight - 20; // không viết chữ sát đáy trang
 
-    let y = 20;
+    let y = 18;
 
-    // Header
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(16, 185, 129);
-    doc.text('TRƯỜNG HỌC / TRUNG TÂM GIÁO DỤC', margin, y, { align: 'center' });
+    /** Nếu đoạn tiếp theo không đủ chỗ thì sang trang mới (viết từ mép trên). */
+    const ensureSpace = (needed: number) => {
+      if (y + needed > bottomLimit) {
+        doc.addPage();
+        y = 20;
+      }
+    };
+
+    /** Viết một đoạn văn tự động xuống dòng, trả về số dòng đã viết. */
+    const writeParagraph = (text: string, size: number, indent = 0, lineHeight = 4.5) => {
+      doc.setFontSize(size);
+      const lines = doc.splitTextToSize(text, contentWidth - indent) as string[];
+      doc.text(lines, margin + indent, y);
+      y += lines.length * lineHeight;
+      return lines.length;
+    };
+
+    doc.setTextColor(0, 0, 0);
+
+    // ---- Đầu trang: tên trường → tên đề → thông tin chung (tất cả căn giữa) ----
+    doc.setFont(FONT_FAMILY, 'bold');
+    doc.setFontSize(13);
+    doc.text(schoolName.trim() || 'TRƯỜNG: ........................................', centerX, y, { align: 'center' });
 
     y += 8;
     doc.setFontSize(16);
-    doc.setTextColor(0, 0, 0);
-    doc.text('ĐỀ KIỂM TRA', margin, y, { align: 'center' });
+    doc.setTextColor(16, 185, 129);
+    doc.text('ĐỀ KIỂM TRA', centerX, y, { align: 'center' });
 
     y += 8;
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(exam.title, centerX, y, { align: 'center' });
+
+    y += 7;
+    doc.setFont(FONT_FAMILY, 'normal');
+    doc.setFontSize(10);
     doc.setTextColor(90, 90, 90);
     doc.text(
       `Môn: ${exam.subject}   |   ${gradeLabel(exam.grade)}   |   Thời gian: ${exam.durationMinutes} phút   |   Tổng điểm: ${exam.totalPoints}`,
-      margin,
+      centerX,
       y,
       { align: 'center' },
     );
 
-    y += 12;
-    doc.setFontSize(13);
-    doc.setFont('helvetica', 'bold');
+    y += 6;
+    // Đường kẻ ngang màu xanh phân tách phần đầu trang với nội dung đề.
+    doc.setDrawColor(16, 185, 129);
+    doc.setLineWidth(0.4);
+    doc.line(margin, y, pageWidth - margin, y);
     doc.setTextColor(0, 0, 0);
-    doc.text(`Tên đề: ${exam.title}`, margin, y);
+
+    y += 8;
+    doc.setFontSize(10);
+    doc.text(
+      'Họ và tên: ..........................................................   Lớp: ................',
+      margin,
+      y,
+    );
 
     const roman = ['I', 'II', 'III', 'IV'];
     let sectionIndex = 0;
 
-    // Trắc nghiệm
+    // ---- Phần I: Trắc nghiệm (nội dung câu hỏi + bảng đáp án) ----
     if (exam.mcqCount > 0) {
       y += 10;
+      ensureSpace(12);
       doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(FONT_FAMILY, 'bold');
       doc.setTextColor(0, 0, 0);
       doc.text(`${roman[sectionIndex]}. PHẦN TRẮC NGHIỆM`, margin, y);
       sectionIndex += 1;
 
       y += 6;
+      doc.setFont(FONT_FAMILY, 'normal');
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
       doc.text(`Số câu: ${exam.mcqCount} · Điểm/câu: ${exam.mcqPointPerQ}`, margin, y);
+      y += 7;
 
-      y += 6;
-      if (exam.mcqImages?.length > 0) {
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'italic');
-        doc.setTextColor(120, 120, 120);
-        doc.text('[Ảnh đề trắc nghiệm được đính kèm riêng trong hệ thống]', margin, y);
-        y += 6;
+      // In toàn bộ nội dung câu hỏi dạng văn bản cùng 4 phương án A/B/C/D.
+      const questions = exam.mcqQuestions ?? [];
+      for (let index = 0; index < exam.mcqCount; index += 1) {
+        const question = questions[index];
+        ensureSpace(12);
+
+        // Nhãn "Câu N." in đậm; nội dung câu hỏi thụt lề đúng sau nhãn (hanging indent).
+        const label = `Câu ${index + 1}.`;
+        doc.setFont(FONT_FAMILY, 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        doc.text(label, margin, y);
+        const indent = doc.getTextWidth(label) + 2;
+
+        if (question?.content?.trim()) {
+          doc.setFont(FONT_FAMILY, 'normal');
+          const lines = doc.splitTextToSize(question.content.trim(), contentWidth - indent) as string[];
+          lines.forEach((line, lineIndex) => {
+            doc.text(line, margin + indent, y + lineIndex * 4.5);
+          });
+          y += lines.length * 4.5 + 1.5;
+
+          // 4 phương án A/B/C/D, căn lề trái thống nhất cho gọn.
+          const optionLabels = ['A', 'B', 'C', 'D'];
+          doc.setFontSize(9.5);
+          (question.options ?? []).forEach((option, optionIndex) => {
+            ensureSpace(5);
+            const optionLines = doc.splitTextToSize(
+              `${optionLabels[optionIndex]}. ${option || '...'}`,
+              contentWidth - 8,
+            ) as string[];
+            optionLines.forEach((line, lineIndex) => {
+              doc.text(line, margin + 8, y + lineIndex * 4.5);
+            });
+            y += optionLines.length * 4.5;
+          });
+          y += 3;
+        } else {
+          // Câu chỉ có ảnh (không có nội dung văn bản): ghi chú để giáo viên in ảnh đề riêng.
+          y += 5;
+          doc.setFont(FONT_FAMILY, 'normal');
+          doc.setFontSize(9);
+          doc.setTextColor(120, 120, 120);
+          doc.text('[Câu hỏi dạng ảnh — ảnh đề được hiển thị trong hệ thống]', margin + 8, y);
+          y += 7;
+          doc.setTextColor(0, 0, 0);
+        }
       }
 
+      // Bảng đáp án đúng, đặt SAU phần câu hỏi (giáo viên giữ lại để đối chiếu).
       if (exam.mcqAnswers?.length > 0) {
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
+        ensureSpace(20);
+        doc.setFont(FONT_FAMILY, 'bold');
+        doc.setFontSize(11);
         doc.setTextColor(0, 0, 0);
-        doc.text('Đáp án trắc nghiệm:', margin, y);
+        doc.text('BẢNG ĐÁP ÁN (dành cho giáo viên)', margin, y);
         y += 5;
 
         const rows = exam.mcqAnswers.map((ans, i) => {
@@ -141,7 +292,15 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
           body: rows,
           margin: { left: margin, right: margin },
           theme: 'grid',
-          headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontSize: 9 },
+          // Bảng cũng phải dùng font tiếng Việt, nếu ký tự có dấu sẽ hiển thị sai.
+          styles: { font: FONT_FAMILY, fontSize: 9 },
+          headStyles: {
+            font: FONT_FAMILY,
+            fontStyle: 'bold',
+            fillColor: [16, 185, 129],
+            textColor: [255, 255, 255],
+            fontSize: 9,
+          },
           bodyStyles: { fontSize: 9 },
           columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 20 } },
         });
@@ -150,118 +309,100 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
       }
     }
 
-    // Trả lời ngắn
+    // ---- Phần II: Trả lời ngắn ----
     if ((exam.shortAnswerQuestions?.length ?? 0) > 0) {
-      y += 4;
+      ensureSpace(14);
       doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(FONT_FAMILY, 'bold');
       doc.setTextColor(0, 0, 0);
       doc.text(`${roman[sectionIndex]}. PHẦN TRẢ LỜI NGẮN`, margin, y);
       sectionIndex += 1;
 
       y += 6;
+      doc.setFont(FONT_FAMILY, 'normal');
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
       doc.text(`Số câu: ${exam.shortAnswerQuestions.length}`, margin, y);
       y += 6;
 
       exam.shortAnswerQuestions.forEach((q, qi) => {
-        if (y > 270) {
-          doc.addPage();
-          y = 20;
-        }
+        ensureSpace(14);
 
+        doc.setFont(FONT_FAMILY, 'bold');
         doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
         doc.setTextColor(0, 0, 0);
         doc.text(`${q.questionLabel || `Câu ${qi + 1}`} (${q.points} điểm)`, margin, y);
         y += 5;
 
         if (q.content) {
-          doc.setFontSize(9);
-          doc.setFont('helvetica', 'normal');
-          const lines = doc.splitTextToSize(q.content, contentWidth);
-          doc.text(lines, margin, y);
-          y += lines.length * 4.5 + 1;
+          doc.setFont(FONT_FAMILY, 'normal');
+          writeParagraph(q.content, 9);
+          y += 1;
         }
 
         if (q.questionImage) {
           doc.setFontSize(8);
-          doc.setFont('helvetica', 'italic');
           doc.setTextColor(120, 120, 120);
           doc.text('[Có ảnh đề đính kèm trong hệ thống]', margin, y);
           y += 5;
         }
 
+        doc.setFont(FONT_FAMILY, 'bold');
         doc.setFontSize(9);
-        doc.setFont('helvetica', 'bold');
         doc.setTextColor(16, 185, 129);
         doc.text(`Đáp án: ${q.answer}`, margin, y);
         doc.setTextColor(0, 0, 0);
         y += 5;
 
         if (q.rubric) {
+          doc.setFont(FONT_FAMILY, 'normal');
           doc.setFontSize(8);
-          doc.setFont('helvetica', 'italic');
           doc.setTextColor(120, 120, 120);
-          const rubricLines = doc.splitTextToSize(`Rubric: ${q.rubric}`, contentWidth);
-          doc.text(rubricLines, margin, y);
-          y += rubricLines.length * 4;
+          writeParagraph(`Rubric: ${q.rubric}`, 8, 0, 4);
         }
         y += 4;
       });
     }
 
-    // Tự luận
+    // ---- Phần III: Tự luận ----
     if ((exam.essayQuestions?.length ?? 0) > 0) {
-      y += 4;
+      ensureSpace(14);
       doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(FONT_FAMILY, 'bold');
       doc.setTextColor(0, 0, 0);
       doc.text(`${roman[sectionIndex]}. PHẦN TỰ LUẬN`, margin, y);
 
       y += 6;
+      doc.setFont(FONT_FAMILY, 'normal');
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
       doc.text(`Số câu: ${exam.essayQuestions.length}`, margin, y);
 
       y += 6;
       (exam.essayQuestions ?? []).forEach((q, qi) => {
-        if (y > 270) {
-          doc.addPage();
-          y = 20;
-        }
+        ensureSpace(14);
 
+        doc.setFont(FONT_FAMILY, 'bold');
         doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
         doc.setTextColor(0, 0, 0);
         doc.text(`${q.questionLabel || `Câu ${qi + 1}`} (${q.points} điểm)`, margin, y);
         y += 5;
 
         (q.subParts ?? []).forEach((part) => {
+          ensureSpace(5);
+          doc.setFont(FONT_FAMILY, 'normal');
           doc.setFontSize(9);
-          doc.setFont('helvetica', 'normal');
-          const lines = doc.splitTextToSize(
-            `   ${part.label}. ${part.content || ''} (${part.points} điểm)`,
-            contentWidth,
-          );
-          doc.text(lines, margin, y);
-          y += lines.length * 4.5 + 0.5;
+          writeParagraph(`   ${part.label}. ${part.content || ''} (${part.points} điểm)`, 9);
         });
 
         doc.setFontSize(8);
-        doc.setFont('helvetica', 'italic');
         doc.setTextColor(120, 120, 120);
-        const rubricLines = doc.splitTextToSize(
-          `Rubric: ${q.rubric || 'Chưa có hướng dẫn chấm điểm'}`,
-          contentWidth,
-        );
-        doc.text(rubricLines, margin, y);
-        y += rubricLines.length * 4 + 2;
+        ensureSpace(5);
+        writeParagraph(`Rubric: ${q.rubric || 'Chưa có hướng dẫn chấm điểm'}`, 8, 0, 4);
+        y += 2;
       });
     }
 
-    const fileName = `${exam.title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+    // Tên file bỏ dấu tiếng Việt để không lỗi khi tải về trên mọi hệ điều hành.
+    const fileName = `${slugify(exam.title) || 'de-kiem-tra'}.pdf`;
     doc.save(fileName);
   };
 
@@ -286,7 +427,7 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
         </button>
       </header>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -319,6 +460,17 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
             </option>
           ))}
         </select>
+        <div className="relative sm:w-64">
+          <Building2 className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={schoolName}
+            onChange={(event) => handleSchoolNameChange(event.target.value)}
+            placeholder="Tên trường in trên PDF..."
+            aria-label="Tên trường in đầu trang khi xuất PDF"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+          />
+        </div>
         <span className="rounded-xl bg-emerald-50 px-3 py-2 text-center text-[11px] font-bold text-emerald-700">
           {filtered.length}/{exams.length} đề
         </span>
@@ -450,7 +602,13 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      void exportToPdf(exam);
+                      exportToPdf(exam).catch((error: unknown) => {
+                        console.error('Lỗi xuất PDF:', error);
+                        toast.error(
+                          'Không thể xuất PDF',
+                          error instanceof Error ? error.message : 'Vui lòng thử lại.',
+                        );
+                      });
                     }}
                     title="Xuất PDF"
                     className="rounded-lg p-2 text-slate-400 transition hover:bg-amber-50 hover:text-amber-600"

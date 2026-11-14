@@ -1,114 +1,317 @@
 'use client';
 
-import { useState } from 'react'
-import { useToast } from '@/components/ui/FeedbackProvider'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
+  ArrowLeft,
   LayoutDashboard,
-  FileText,
-  Users,
+  LoaderCircle,
+  LogOut,
+  Menu,
   Plus,
-  Trash2,
-  Edit3,
   Search,
   Sparkles,
+  Trash2,
+  Users,
+  X,
 } from 'lucide-react'
+import type { TeacherClass } from '@/lib/types'
+import { DEFAULT_TEACHER_NAME, SUBJECTS } from '@/lib/types'
+import { cn, formatDate } from '@/lib/utils'
+import { clearSession, getSession, loadClasses, saveClasses, slugify } from '@/lib/storage'
+import {
+  deleteClassFromCloud,
+  fetchClassesFromCloud,
+  saveClassToCloud,
+} from '@/lib/supabase'
+import { BrandLogo } from '@/components/ui/Brand'
+import { useConfirm, useToast } from '@/components/ui/FeedbackProvider'
+import { useIsClient } from '@/lib/hooks'
 
+/**
+ * Trang quản lý lớp học của giáo viên (/teacher/classes).
+ * - Dữ liệu lưu trên Supabase (bảng "classes"), dự phòng localStorage khi mất mạng.
+ * - Tạo lớp bằng modal (không dùng prompt() của trình duyệt).
+ * - Xóa lớp hỏi xác nhận bằng useConfirm (không dùng confirm() của trình duyệt).
+ */
 export default function ClassesPage() {
+  const router = useRouter()
   const toast = useToast()
-  const [classes, setClasses] = useState<Array<{ id: string; name: string; code: string; studentCount: string; subject: string; createdAt: string }>>([
-    { id: '1', name: 'Toán 9A', code: 'MATH9A', studentCount: '35', subject: 'Toán học', createdAt: '2026-10-01' },
-    { id: '2', name: 'Tiếng Anh 8B', code: 'ENG8B', studentCount: '40', subject: 'Tiếng Anh', createdAt: '2026-10-05' },
-    { id: '3', name: 'Vật lý 10A', code: 'PHYS10A', studentCount: '32', subject: 'Vật lý', createdAt: '2026-10-10' },
-  ])
+  const confirm = useConfirm()
+  const isClient = useIsClient()
+
+  // Phiên đăng nhập: chưa đăng nhập giáo viên thì đẩy về trang chủ.
+  const session = isClient ? getSession() : { role: null as string | null, username: '' }
+  const teacherName = session.username || DEFAULT_TEACHER_NAME
+
+  const [classes, setClasses] = useState<TeacherClass[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const filteredClasses = classes.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.code.toLowerCase().includes(search.toLowerCase())
-  )
+  // Trạng thái modal tạo lớp.
+  const [modalOpen, setModalOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ name: '', code: '', subject: 'Chưa phân loại', studentCount: '0' })
+  const [codeTouched, setCodeTouched] = useState(false)
 
-  const addClass = () => {
-    const name = prompt('Nhập tên lớp học:')
-    if (!name) return
-    const code = prompt('Nhập mã lớp (ví dụ: MATH9A):')
-    if (!code) return
-    const newClass = {
-      id: String(Date.now()),
-      name,
-      code,
-      studentCount: '0',
-      subject: 'Chưa phân loại',
-      createdAt: new Date().toISOString().split('T')[0],
+  // Tải danh sách lớp: ưu tiên Supabase, dự phòng localStorage khi mất mạng
+  // hoặc khi bảng "classes" chưa được tạo trên Supabase.
+  useEffect(() => {
+    if (!isClient) return
+    let cancelled = false
+    const load = async () => {
+      const cloud = await fetchClassesFromCloud()
+      if (cancelled) return
+      if (cloud) {
+        setClasses(cloud)
+        saveClasses(cloud)
+      } else {
+        setClasses(loadClasses())
+      }
+      setIsLoading(false)
     }
-    setClasses([newClass, ...classes])
-    toast.success('Đã tạo lớp', `Lớp ${name} đã được tạo thành công.`)
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [isClient])
+
+  // Chặn truy cập khi chưa đăng nhập giáo viên.
+  useEffect(() => {
+    if (isClient && session.role !== 'TEACHER') {
+      router.replace('/')
+    }
+  }, [isClient, router, session.role])
+
+  // Đóng modal bằng phím Esc.
+  useEffect(() => {
+    if (!modalOpen) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setModalOpen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [modalOpen])
+
+  const filteredClasses = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return classes
+    return classes.filter(
+      (item) => item.name.toLowerCase().includes(query) || item.code.toLowerCase().includes(query),
+    )
+  }, [classes, search])
+
+  /** Gợi ý mã lớp từ tên lớp: "Toán 9A" → "TOAN9A". */
+  const suggestCode = (name: string) =>
+    slugify(name).replace(/-/g, '').toUpperCase().slice(0, 8)
+
+  const openCreateModal = () => {
+    setForm({ name: '', code: '', subject: 'Chưa phân loại', studentCount: '0' })
+    setCodeTouched(false)
+    setModalOpen(true)
   }
 
-  const deleteClass = (id: string) => {
-    if (confirm('Bạn chắc chắn muốn xóa lớp này?')) {
-      setClasses(classes.filter((c) => c.id !== id))
-      toast.success('Đã xóa lớp', 'Lớp học đã bị xóa.')
-    }
+  const handleNameChange = (value: string) => {
+    setForm((current) => ({
+      ...current,
+      name: value,
+      // Mã lớp tự điền theo tên, trừ khi giáo viên đã tự sửa mã.
+      code: codeTouched ? current.code : suggestCode(value),
+    }))
   }
+
+  const handleSaveClass = async () => {
+    const trimmedName = form.name.trim()
+    if (!trimmedName) {
+      toast.error('Thiếu thông tin', 'Vui lòng nhập tên lớp.')
+      return
+    }
+
+    const cls: TeacherClass = {
+      id: `class-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: trimmedName,
+      code: form.code.trim().toUpperCase() || suggestCode(trimmedName),
+      subject: form.subject,
+      studentCount: Math.max(0, Math.round(Number(form.studentCount) || 0)),
+      createdAt: new Date().toISOString(),
+    }
+
+    setSaving(true)
+    const result = await saveClassToCloud(cls)
+    setSaving(false)
+
+    if (!result.ok) {
+      // Chưa đẩy được lên máy chủ → vẫn giữ trên thiết bị để không mất công nhập lại.
+      const next = [cls, ...classes]
+      setClasses(next)
+      saveClasses(next)
+      toast.warning('Chưa đồng bộ lên máy chủ', 'Lớp đã lưu trên thiết bị này. Kiểm tra kết nối mạng rồi thử lại.')
+    } else {
+      const next = [cls, ...classes]
+      setClasses(next)
+      saveClasses(next)
+      toast.success('Đã tạo lớp', `Lớp ${cls.name} đã được lưu.`)
+    }
+    setModalOpen(false)
+  }
+
+  const handleDeleteClass = async (cls: TeacherClass) => {
+    const confirmed = await confirm({
+      title: 'Xóa lớp học?',
+      message: `Lớp "${cls.name}" sẽ bị xóa khỏi danh sách. Hành động không thể hoàn tác.`,
+      confirmLabel: 'Xóa lớp',
+      tone: 'danger',
+    })
+    if (!confirmed) return
+
+    const result = await deleteClassFromCloud(cls.id)
+    if (!result.ok) {
+      // Xóa thất bại trên máy chủ thì KHÔNG xóa ở máy (lớp sẽ hiện lại ở lần tải sau).
+      toast.error('Không xóa được trên máy chủ', result.message ?? 'Vui lòng thử lại.')
+      return
+    }
+
+    const next = classes.filter((item) => item.id !== cls.id)
+    setClasses(next)
+    saveClasses(next)
+    toast.success('Đã xóa lớp', `Lớp ${cls.name} đã bị xóa.`)
+  }
+
+  const handleLogout = () => {
+    clearSession()
+    router.push('/')
+  }
+
+  // Trang chỉ hiển thị khi đã xác thực trên trình duyệt.
+  if (!isClient || session.role !== 'TEACHER') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="size-5 animate-spin text-emerald-600" />
+          <span className="text-sm font-semibold text-slate-600">Đang tải trang lớp học...</span>
+        </div>
+      </div>
+    )
+  }
+
+  const inputClass =
+    'w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20'
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-700">
-      <div className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-sm lg:hidden" />
-      <aside className="fixed inset-y-0 left-0 z-50 flex w-72 transform flex-col justify-between bg-white p-5 transition-transform duration-300 ease-out lg:translate-x-0 shadow-xl -translate-x-full">
+      {/* Lớp phủ tối khi mở menu trên điện thoại */}
+      {sidebarOpen ? (
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-sm lg:hidden"
+          aria-label="Đóng menu"
+        />
+      ) : null}
+
+      {/* Menu dọc: ẩn hẳn sang trái trên điện thoại, trượt vào khi bấm nút menu */}
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 flex w-72 transform flex-col justify-between bg-slate-950 p-5 transition-transform duration-300 ease-out lg:translate-x-0',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
+      >
         <div className="min-h-0 overflow-y-auto">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="size-8 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 flex items-center justify-center">
-                <Sparkles className="size-5 text-white" />
-              </div>
-              <span className="font-black text-emerald-600 tracking-tight text-lg">THTEDUexam</span>
-            </div>
-            <button type="button" className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-50 lg:hidden">
-              <span className="size-4">✕</span>
+          <div className="flex items-start justify-between">
+            <BrandLogo light subtitle="Không gian giáo viên" />
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              className="rounded-xl p-2 text-slate-400 transition hover:bg-white/10 hover:text-white lg:hidden"
+              aria-label="Đóng menu"
+            >
+              <X className="size-4" />
             </button>
           </div>
-          <nav className="mt-6 space-y-1">
-            <button type="button" className="flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left bg-emerald-50 text-emerald-600">
+
+          <div className="mt-7 flex items-center gap-3 rounded-2xl bg-white/5 p-3 ring-1 ring-white/10">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-xs font-bold text-white">
+              GV
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-white">{teacherName}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Giáo viên</p>
+            </div>
+            <Sparkles className="ml-auto size-4 text-emerald-400" />
+          </div>
+
+          <nav className="mt-6 space-y-1.5">
+            <button
+              type="button"
+              onClick={() => router.push('/teacher/dashboard')}
+              className="flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left text-slate-400 transition hover:bg-white/5 hover:text-white"
+            >
+              <LayoutDashboard className="size-[18px]" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-bold">Tổng quan</span>
+                <span className="block text-[10px] font-medium text-slate-500">Bảng điều khiển</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-3 text-left text-white shadow-lg shadow-emerald-950/40"
+              aria-current="page"
+            >
               <Users className="size-[18px]" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-bold">Lớp học</span>
+                <span className="block text-[10px] font-medium text-emerald-100">Danh sách lớp</span>
               </span>
             </button>
-            <button type="button" className="flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left text-slate-400 hover:bg-slate-50 hover:text-emerald-600">
-              <LayoutDashboard className="size-[18px]" />
-              <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-bold">Tổng quan</span></span>
-            </button>
           </nav>
+        </div>
+
+        <div className="space-y-2 border-t border-white/10 pt-4">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex w-full items-center gap-2.5 rounded-xl bg-rose-500/10 px-3 py-2.5 text-xs font-bold text-rose-300 transition hover:bg-rose-500/20"
+          >
+            <LogOut className="size-4" />
+            Đăng xuất
+          </button>
         </div>
       </aside>
 
       <div className="flex min-h-screen flex-col lg:pl-72">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
-          <button type="button" className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50">
-            <span className="size-4">☰</span>
-          </button>
+        {/* Thanh đầu trang trên điện thoại: nút mở menu + nút quay lại dashboard */}
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur">
           <div className="flex items-center gap-2">
-            <div className="size-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 flex items-center justify-center">
-              <Sparkles className="size-4 text-white" />
-            </div>
-            <span className="font-black text-emerald-600 tracking-tight">THTEDUexam</span>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <button type="button" className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
-              Giáo viên
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50"
+              aria-label="Mở menu"
+            >
+              <Menu className="size-5" />
             </button>
+            <BrandLogo compact />
           </div>
+          <button
+            type="button"
+            onClick={() => router.push('/teacher/dashboard')}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50"
+          >
+            <ArrowLeft className="size-4" />
+            Về dashboard
+          </button>
         </header>
 
         <main className="mx-auto w-full max-w-[1400px] flex-1 p-4 pb-14 sm:p-6 lg:p-8">
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Quản lý lớp học</h1>
-              <p className="mt-1 text-sm text-slate-500">Tạo lớp, mời học sinh và theo dõi tiến độ.</p>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Quản lý lớp học</h1>
+              <p className="mt-1 text-sm text-slate-500">Tạo lớp, tìm kiếm và theo dõi số học sinh của từng lớp.</p>
             </div>
             <button
               type="button"
-              onClick={addClass}
+              onClick={openCreateModal}
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-600/25 transition hover:from-emerald-700 hover:to-teal-700 active:scale-[0.98]"
             >
               <Plus className="size-4" />
@@ -116,81 +319,230 @@ export default function ClassesPage() {
             </button>
           </div>
 
-          <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Tìm theo tên lớp hoặc mã lớp..."
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 py-2.5 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="pb-3 text-[11px] font-black uppercase tracking-wide text-slate-400">Tên lớp</th>
-                    <th className="pb-3 text-[11px] font-black uppercase tracking-wide text-slate-400">Mã lớp</th>
-                    <th className="pb-3 text-[11px] font-black uppercase tracking-wide text-slate-400">Học sinh</th>
-                    <th className="pb-3 text-[11px] font-black uppercase tracking-wide text-slate-400">Môn học</th>
-                    <th className="pb-3 text-[11px] font-black uppercase tracking-wide text-slate-400">Tạo ngày</th>
-                    <th className="pb-3 text-[11px] font-black uppercase tracking-wide text-slate-400 text-right">Hành động</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredClasses.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400">
-                        <span className="flex size-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-400 mx-auto mb-3">
-                          <Users className="size-7" />
-                        </span>
-                        <p className="text-sm font-bold text-slate-800 dark:text-white">Không tìm thấy lớp học</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredClasses.map((cls) => (
-                      <tr key={cls.id} className="border-b border-slate-50 hover:bg-slate-50 transition">
-                        <td className="py-4">
-                          <p className="text-sm font-bold text-slate-900">{cls.name}</p>
-                        </td>
-                        <td className="py-4">
-                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-100">
-                            {cls.code}
-                          </span>
-                        </td>
-                        <td className="py-4">
-                          <span className="text-sm font-medium text-slate-600">{cls.studentCount}</span>
-                        </td>
-                        <td className="py-4">
-                          <span className="text-sm font-medium text-slate-600">{cls.subject}</span>
-                        </td>
-                        <td className="py-4">
-                          <span className="text-xs text-slate-400">{cls.createdAt}</span>
-                        </td>
-                        <td className="py-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => deleteClass(cls.id)}
-                            className="p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
-                            title="Xóa lớp"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+          {/* Ô tìm kiếm theo tên hoặc mã lớp */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Tìm theo tên lớp hoặc mã lớp..."
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+              />
             </div>
           </div>
+
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+              <LoaderCircle className="size-7 animate-spin text-emerald-500" />
+              <p className="text-sm font-bold text-slate-600">Đang tải danh sách lớp...</p>
+            </div>
+          ) : filteredClasses.length === 0 ? (
+            <div className="mt-6 flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-20 text-center">
+              <span className="flex size-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
+                <Users className="size-7" />
+              </span>
+              <div>
+                <p className="text-base font-bold text-slate-800">
+                  {classes.length === 0 ? 'Chưa có lớp học nào' : 'Không tìm thấy lớp phù hợp'}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {classes.length === 0
+                    ? 'Tạo lớp đầu tiên để sắp xếp học sinh theo từng lớp.'
+                    : 'Thử từ khóa khác hoặc xóa ô tìm kiếm.'}
+                </p>
+              </div>
+              {classes.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={openCreateModal}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-emerald-700"
+                >
+                  <Plus className="size-4" /> Tạo lớp học
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="text-sm font-bold text-emerald-700 hover:underline"
+                >
+                  Xóa tìm kiếm
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {filteredClasses.map((cls) => (
+                <article
+                  key={cls.id}
+                  className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-900/5"
+                >
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 opacity-0 transition group-hover:opacity-100" />
+
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                      <Users className="size-5" />
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteClass(cls)}
+                      title="Xóa lớp"
+                      aria-label={`Xóa lớp ${cls.name}`}
+                      className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+
+                  <h2 className="mt-3 truncate text-base font-bold leading-snug text-slate-900">{cls.name}</h2>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {cls.code ? (
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-600/10">
+                        {cls.code}
+                      </span>
+                    ) : null}
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                      {cls.subject}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                    <span className="text-xs font-semibold text-slate-500">
+                      {cls.studentCount} học sinh
+                      {cls.createdAt ? ` · ${formatDate(cls.createdAt)}` : ''}
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </main>
       </div>
+
+      {/* Modal tạo lớp học */}
+      {modalOpen ? (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-class-title"
+            className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
+              <div>
+                <h2 id="create-class-title" className="text-lg font-bold text-slate-900">
+                  Tạo lớp mới
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-500">Nhập tên lớp — mã lớp sẽ tự gợi ý theo tên.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Đóng hộp thoại"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                void handleSaveClass()
+              }}
+              className="space-y-4 p-5"
+            >
+              <div>
+                <label htmlFor="class-name" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Tên lớp *
+                </label>
+                <input
+                  id="class-name"
+                  type="text"
+                  required
+                  autoFocus
+                  value={form.name}
+                  onChange={(event) => handleNameChange(event.target.value)}
+                  placeholder="Ví dụ: Toán 9A"
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="class-code" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Mã lớp
+                </label>
+                <input
+                  id="class-code"
+                  type="text"
+                  value={form.code}
+                  onChange={(event) => {
+                    setCodeTouched(true)
+                    setForm((current) => ({ ...current, code: event.target.value }))
+                  }}
+                  placeholder="Ví dụ: TOAN9A"
+                  className={inputClass}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="class-subject" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Môn học
+                  </label>
+                  <select
+                    id="class-subject"
+                    value={form.subject}
+                    onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))}
+                    className={inputClass}
+                  >
+                    <option value="Chưa phân loại">Chưa phân loại</option>
+                    {SUBJECTS.map((subject) => (
+                      <option key={subject} value={subject}>
+                        {subject}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="class-count" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Số học sinh
+                  </label>
+                  <input
+                    id="class-count"
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={form.studentCount}
+                    onChange={(event) => setForm((current) => ({ ...current, studentCount: event.target.value }))}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50/70 p-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {saving ? <LoaderCircle className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                  Tạo lớp
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

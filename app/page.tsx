@@ -42,7 +42,8 @@ export default function LoginPage() {
     setTimeout(() => {
       setLoading(false);
       if (username.trim() === 'thien20193' && password === 'thien123') {
-        setTeacherSession('Thầy Thiện');
+        // Lưu tên đăng nhập vào phiên — mọi trang sẽ hiển thị theo session này.
+        setTeacherSession(username.trim());
         toast.success('Đăng nhập thành công', 'Chào mừng thầy quay lại không gian giáo viên.');
         router.push('/teacher/dashboard');
       } else {

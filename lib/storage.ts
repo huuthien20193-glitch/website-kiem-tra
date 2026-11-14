@@ -9,6 +9,7 @@ import type {
   ShortAnswerQuestion,
   Submission,
   SubPart,
+  TeacherClass,
   TeacherDocument,
 } from './types';
 import { GRADES } from './types';
@@ -23,6 +24,10 @@ export const STORAGE_KEYS = {
   username: 'tht_username',
   studentName: 'tht_student_name',
   studentClass: 'tht_student_class',
+  /** Danh sách lớp học của giáo viên (trang /teacher/classes). */
+  classes: 'tht_teacher_classes',
+  /** Tên trường in đầu trang khi giáo viên xuất đề ra PDF. */
+  schoolName: 'tht_school_name',
 } as const;
 
 export type ExamDraft = {
@@ -444,6 +449,37 @@ export function saveDocuments(documents: TeacherDocument[]): boolean {
   return writeJSON(STORAGE_KEYS.documents, documents);
 }
 
+/* ------------------------------ Lớp học (classes) ------------------------------ */
+
+/** Chuẩn hóa một lớp học đọc từ localStorage: chỉ nhận dữ liệu hợp lệ. */
+function normalizeClass(raw: Partial<TeacherClass>): TeacherClass {
+  return {
+    id: String(raw?.id ?? `class-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
+    name: typeof raw?.name === 'string' && raw.name ? raw.name : 'Lớp chưa đặt tên',
+    code: typeof raw?.code === 'string' ? raw.code : '',
+    subject: typeof raw?.subject === 'string' && raw.subject ? raw.subject : 'Chưa phân loại',
+    studentCount: Math.max(0, Math.round(asNumber(raw?.studentCount, 0))),
+    createdAt: typeof raw?.createdAt === 'string' ? raw.createdAt : undefined,
+  };
+}
+
+export function loadClasses(): TeacherClass[] {
+  if (!hasWindow()) return [];
+  const raw = window.localStorage.getItem(STORAGE_KEYS.classes);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => normalizeClass(item as Partial<TeacherClass>));
+  } catch {
+    return [];
+  }
+}
+
+export function saveClasses(classes: TeacherClass[]): boolean {
+  return writeJSON(STORAGE_KEYS.classes, classes);
+}
+
 export function buildSubmission(
   exam: Exam,
   studentName: string,
@@ -577,7 +613,8 @@ export function getStudentProfile() {
 
 /* ------------------------------ Draft ------------------------------ */
 
-function slugify(value: string) {
+/** Chuyển chuỗi tiếng Việt thành tên file an toàn: bỏ dấu, chỉ còn chữ/số/gạch nối. */
+export function slugify(value: string) {
   return value
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
