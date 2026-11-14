@@ -7,6 +7,7 @@ import {
   selectKnowledge,
 } from '@/lib/knowledge';
 import { figureDataUrlFromAi } from '@/lib/figure';
+import { evaluateExpression } from '@/lib/quality';
 
 /**
  * API AI cho phần giáo viên — gọi Google Gemini.
@@ -415,13 +416,28 @@ function normalizeExamDraft(raw: UnknownRecord): UnknownRecord {
         seen.add(key);
         return true;
       })
-      .map((item) => ({
-        ...item,
-        content: toText(item.content),
-        answer: toText(item.answer),
-        points: Math.max(0.25, toNumber(item.points, 0.5)),
-        explanation: toText(item.explanation),
-      }));
+      .map((item) => {
+        const answer = toText(item.answer);
+        const computation = (item as { computation?: { expression?: unknown; expected?: unknown } }).computation;
+        const expression = toText(computation?.expression);
+        const expected = Number(computation?.expected);
+        // Model đôi khi trả "computation" nhưng quên field "answer". Chỉ điền thay
+        // khi bộ tính biểu thức độc lập XÁC NHẬN đúng "expected" — không bấm số thay
+        // khi hai nguồn lệch nhau (lệch → để QC Engine bắt và gắn "cần xem xét").
+        const evaluated = expression ? evaluateExpression(expression) : null;
+        const expectedConfirmed =
+          evaluated !== null &&
+          Number.isFinite(expected) &&
+          Math.abs(evaluated - expected) <= Math.max(1e-6, Math.abs(expected) * 1e-6);
+        const filledAnswer = answer || (expectedConfirmed ? String(Number(expected.toFixed(6))) : '');
+        return {
+          ...item,
+          content: toText(item.content),
+          answer: filledAnswer,
+          points: Math.max(0.25, toNumber(item.points, 0.5)),
+          explanation: toText(item.explanation),
+        };
+      });
   }
 
   // ---- Trả lời ngắn / tự luận ----
@@ -949,7 +965,48 @@ export async function POST(request: NextRequest) {
       if (!merged.subject) merged.subject = subject;
 
       // Kiểm tra + làm sạch cấu trúc đề trước khi trả về giao diện.
-      return Response.json({ ok: true, draft: normalizeExamDraft(merged), knowledge: stats });
+      const draft = normalizeExamDraft(merged);
+
+      // ---- Cắt từng mảng về đúng số câu giáo viên yêu cầu ----
+      // Model đôi khi sinh thừa (yêu cầu 4 → trả 7) — cắt bớt để khớp số câu đã chọn.
+      const requestedCounts: Array<[string, number]> = [
+        ['mcq', mcqCount],
+        ['multiMcq', multiMcqCount],
+        ['trueFalse', trueFalseCount],
+        ['fillBlanks', fillBlankCount],
+        ['calculations', calculationCount],
+        ['shortAnswers', shortCount],
+        ['essays', essayCount],
+      ];
+      for (const [key, count] of requestedCounts) {
+        if (Array.isArray(draft[key])) {
+          draft[key] = (draft[key] as unknown[]).slice(0, count);
+        }
+      }
+
+      // ---- Chốt điểm mỗi câu theo phân bổ trọng số ----
+      // Trước đây chỉ gửi kindPoints làm "gợi ý" — model không tuân thủ khiến tổng
+      // điểm lệch thang. Giờ ghi đè points từng câu = unit × trọng số (làm tròn 0.25)
+      // để tổng điểm đề nháp khớp thang điểm ngay từ đầu; GV vẫn chỉnh được từng câu.
+      const pointsByKey: Array<[string, number]> = [
+        ['mcq', kindPoints.get('mcq') ?? 0.25],
+        ['multiMcq', kindPoints.get('multiMcq') ?? 0.5],
+        ['trueFalse', kindPoints.get('trueFalse') ?? 1],
+        ['fillBlanks', kindPoints.get('fillBlanks') ?? 0.5],
+        ['calculations', kindPoints.get('calculations') ?? 0.5],
+        ['shortAnswers', kindPoints.get('shortAnswers') ?? 1],
+        ['essays', kindPoints.get('essays') ?? 2],
+      ];
+      for (const [key, pointValue] of pointsByKey) {
+        if (Array.isArray(draft[key]) && pointValue > 0) {
+          draft[key] = (draft[key] as Array<Record<string, unknown>>).map((item) => ({
+            ...item,
+            points: pointValue,
+          }));
+        }
+      }
+
+      return Response.json({ ok: true, draft, knowledge: stats });
     }
 
     if (body.action === 'ocr') {
