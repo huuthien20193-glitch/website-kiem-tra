@@ -12,6 +12,7 @@ import {
 import type { ExtraQuestion } from '@/lib/types';
 import { EXTRA_KIND_LABELS, OPTION_LABELS } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { ProvenanceBadges } from './CreateExamTab';
 
 type ExtraQuestionsEditorProps = {
   questions: ExtraQuestion[];
@@ -164,6 +165,7 @@ export function ExtraQuestionsEditor({
                 />
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
+                <ProvenanceBadges provenance={question} />
                 <button
                   type="button"
                   onClick={() => onRegenerate(question.id)}

@@ -9,6 +9,7 @@ import type {
   Grade,
   McqExplanation,
   McqQuestion,
+  QuestionProvenance,
   ShortAnswerDetail,
   ShortAnswerQuestion,
   Submission,
@@ -130,6 +131,7 @@ export function normalizeExtraQuestion(raw: Partial<ExtraQuestion>, index: numbe
     correctIndexes: kind === 'multi-mcq' ? correctIndexes : undefined,
     statements: kind === 'true-false' ? statements : undefined,
     explanation: raw?.explanation ? normalizeMcqExplanation(raw.explanation as Partial<McqExplanation>) : undefined,
+    ...normalizeProvenance(raw),
   };
 }
 
@@ -143,6 +145,36 @@ export function normalizeEssayQuestion(raw: Partial<EssayQuestion>, index: numbe
       ? raw.subParts.map((part, partIndex) => normalizeSubPart(part, partIndex))
       : [],
     rubric: typeof raw?.rubric === 'string' ? raw.rubric : '',
+    ...normalizeProvenance(raw),
+  };
+}
+
+/** Chuẩn hóa nguồn gốc câu hỏi AI (chủ đề, mức độ, trang tham chiếu, cần xem xét). */
+function normalizeProvenance(raw: Partial<QuestionProvenance> | undefined) {
+  const sourcePages = Array.isArray(raw?.sourcePages)
+    ? raw.sourcePages
+        .map((page) => Math.round(Number(page)))
+        .filter((page) => Number.isInteger(page) && page >= 1 && page <= 2000)
+        .slice(0, 12)
+    : [];
+  return {
+    topic: typeof raw?.topic === 'string' && raw.topic.trim() ? raw.topic.trim() : undefined,
+    level: typeof raw?.level === 'string' && raw.level.trim() ? raw.level.trim() : undefined,
+    sourcePages: sourcePages.length > 0 ? sourcePages : undefined,
+    needsReview: raw?.needsReview === true ? true : undefined,
+  };
+}
+
+/** Chuẩn hóa biểu thức kiểm chứng của câu tính toán (chỉ dùng cho ShortAnswerQuestion). */
+function normalizeComputation(
+  raw: { computation?: { expression?: unknown; expected?: unknown } } | undefined,
+): { expression: string; expected: number } | undefined {
+  const expression = typeof raw?.computation?.expression === 'string' ? raw.computation.expression.trim() : '';
+  if (!expression) return undefined;
+  const expected = Number(raw?.computation?.expected);
+  return {
+    expression: expression.slice(0, 200),
+    expected: Number.isFinite(expected) ? expected : 0,
   };
 }
 
@@ -187,6 +219,8 @@ export function normalizeShortAnswerQuestion(
     explanation: raw?.explanation
       ? normalizeMcqExplanation(raw.explanation as Partial<McqExplanation>)
       : undefined,
+    computation: normalizeComputation(raw),
+    ...normalizeProvenance(raw),
   };
 }
 
@@ -205,7 +239,12 @@ function normalizeMcqQuestions(raw: unknown, mcqCount: number): (McqQuestion | n
     while (options.length < 4) options.push('');
     const image = typeof (item as McqQuestion).image === 'string' ? (item as McqQuestion).image : '';
     if (!content.trim() && !image) return null;
-    return { content, options, image: image || undefined } satisfies McqQuestion;
+    return {
+      content,
+      options,
+      image: image || undefined,
+      ...normalizeProvenance(item as Partial<McqQuestion>),
+    } satisfies McqQuestion;
   });
 }
 

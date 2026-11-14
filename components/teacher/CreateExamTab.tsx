@@ -89,6 +89,67 @@ const createEmptyShortAnswer = (index: number): ShortAnswerQuestion => ({
   rubric: '',
 });
 
+/** Trích nguồn gốc câu hỏi AI (chủ đề, mức độ, trang tham chiếu, cần xem xét). */
+function provenanceOf(item: unknown): {
+  topic?: string;
+  level?: string;
+  sourcePages?: number[];
+  needsReview?: boolean;
+} {
+  const raw = item as { topic?: unknown; level?: unknown; sourcePages?: unknown; needsReview?: unknown };
+  const sourcePages = Array.isArray(raw?.sourcePages)
+    ? raw.sourcePages
+        .map((page) => Math.round(Number(page)))
+        .filter((page) => Number.isInteger(page) && page >= 1)
+        .slice(0, 12)
+    : [];
+  return {
+    topic: typeof raw?.topic === 'string' && raw.topic.trim() ? raw.topic.trim() : undefined,
+    level: typeof raw?.level === 'string' && raw.level.trim() ? raw.level.trim() : undefined,
+    sourcePages: sourcePages.length > 0 ? sourcePages : undefined,
+    needsReview: raw?.needsReview === true ? true : undefined,
+  };
+}
+
+/** Trích biểu thức kiểm chứng của câu tính toán từ đề nháp AI. */
+function computationOf(item: unknown): { expression: string; expected: number } | undefined {
+  const raw = (item as { computation?: { expression?: unknown; expected?: unknown } })?.computation;
+  const expression = typeof raw?.expression === 'string' ? raw.expression.trim() : '';
+  if (!expression) return undefined;
+  const expected = Number(raw?.expected);
+  return { expression, expected: Number.isFinite(expected) ? expected : 0 };
+}
+
+/** Dải chip hiển thị nguồn gốc câu hỏi AI (chủ đề / mức độ / trang tài liệu / cần xem xét). */
+export function ProvenanceBadges({ provenance }: { provenance: { topic?: string; level?: string; sourcePages?: number[]; needsReview?: boolean } }) {
+  const { topic, level, sourcePages, needsReview } = provenance;
+  if (!topic && !level && !sourcePages && !needsReview) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {needsReview ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700 ring-1 ring-rose-300">
+          <CircleAlert className="size-3" /> Cần xem xét
+        </span>
+      ) : null}
+      {topic ? (
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200">
+          📚 {topic}
+        </span>
+      ) : null}
+      {level ? (
+        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200">
+          {level}
+        </span>
+      ) : null}
+      {sourcePages && sourcePages.length > 0 ? (
+        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-700 ring-1 ring-sky-200">
+          📄 Trang {sourcePages.join(', ')}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function NumberBadge({ children }: { children: ReactNode }) {
   return (
     <span className="flex size-7 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-xs font-bold text-white shadow-sm">
@@ -241,7 +302,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         : [];
       while (options.length < 4) options.push('');
       const content = String(item?.content ?? '').trim();
-      nextMcqQuestions.push(content || options.some(Boolean) ? { content, options } : null);
+      nextMcqQuestions.push(content || options.some(Boolean) ? { content, options, ...provenanceOf(item) } : null);
       nextMcqAnswers.push(Math.min(3, Math.max(0, Math.round(aiNumber(item?.correctIndex, 0)))));
       const explanationText = String(item?.explanation ?? '').trim();
       if (explanationText) hasExplanationText = true;
@@ -269,6 +330,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         options,
         correctIndexes,
         explanation: { text: explanationText, images: [] },
+        ...provenanceOf(item),
       });
     });
     aiTrueFalse.forEach((item) => {
@@ -288,6 +350,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         content: String(item?.content ?? '').trim(),
         statements,
         explanation: { text: explanationText, images: [] },
+        ...provenanceOf(item),
       });
     });
 
@@ -322,6 +385,8 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         rubric: '',
         kind,
         explanation: { text: explanationText, images: [] },
+        computation: kind === 'calculation' ? computationOf(item) : undefined,
+        ...provenanceOf(item),
       });
     });
 
@@ -342,6 +407,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         questionImage: '',
         subParts,
         rubric: String(item?.rubric ?? '').trim(),
+        ...provenanceOf(item),
       };
     });
 
@@ -451,7 +517,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         ? question.options.slice(0, 4).map((option) => String(option ?? '').trim())
         : [];
       while (options.length < 4) options.push('');
-      updateMcqQuestion(targetId, { content, options });
+      updateMcqQuestion(targetId, { content, options, ...provenanceOf(question) });
       setMcqAnswers((current) => {
         const next = [...current];
         next[targetId] = Math.min(3, Math.max(0, Math.round(aiNumber(question?.correctIndex, 0))));
@@ -473,6 +539,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
               ...item,
               content,
               points,
+              ...provenanceOf(question),
               options: Array.isArray(question?.options)
                 ? question.options.slice(0, 4).map((option) => String(option ?? '').trim())
                 : undefined,
@@ -506,6 +573,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
               points: Math.max(0, aiNumber(part?.points, 1)),
             }))
           : [{ label: 'a', content, points }],
+        ...provenanceOf(question),
       });
       return;
     }
@@ -518,7 +586,13 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
         : [];
       if (blanks.length > 0) answer = blanks.join(' | ');
     }
-    updateShortAnswer(targetId, { content, answer, points });
+    updateShortAnswer(targetId, {
+      content,
+      answer,
+      points,
+      computation: kind === 'calculation' ? computationOf(question) : undefined,
+      ...provenanceOf(question),
+    });
     updateShortExplanation(targetId, { text: explanationText, images: [] });
   };
 
@@ -1366,6 +1440,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
 
                       {openTextQuestion === index ? (
                         <div className="space-y-3 border-t border-violet-100 p-3">
+                          <ProvenanceBadges provenance={question} />
                           <textarea
                             value={question.content}
                             onChange={(event) =>
@@ -1696,6 +1771,10 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                   </div>
                 </div>
 
+                <div className="mt-3">
+                  <ProvenanceBadges provenance={question} />
+                </div>
+
                 <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
                   <div>
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -1945,6 +2024,10 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                         <Trash2 className="size-3.5" /> Xóa câu
                       </button>
                     </div>
+                  </div>
+
+                  <div className="mt-3">
+                    <ProvenanceBadges provenance={question} />
                   </div>
 
                   <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">

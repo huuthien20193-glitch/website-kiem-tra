@@ -1,6 +1,7 @@
 'use client';
 
 import type { TeacherDocument } from './types';
+import type { KnowledgeStats } from './knowledge';
 
 /** Tài liệu gửi cho AI: văn bản + ảnh/PDF scan khi có. */
 export type AiDocumentPayload = {
@@ -153,6 +154,9 @@ export type AiMcqDraft = {
   options?: unknown;
   correctIndex?: unknown;
   explanation?: unknown;
+  topic?: unknown;
+  level?: unknown;
+  sourcePages?: unknown;
 };
 
 export type AiShortDraft = {
@@ -161,6 +165,10 @@ export type AiShortDraft = {
   points?: unknown;
   explanation?: unknown;
   kind?: unknown;
+  /** Nguồn gốc câu hỏi (Knowledge Engine). */
+  topic?: unknown;
+  level?: unknown;
+  sourcePages?: unknown;
 };
 
 export type AiMultiMcqDraft = {
@@ -169,6 +177,9 @@ export type AiMultiMcqDraft = {
   correctIndexes?: unknown;
   points?: unknown;
   explanation?: unknown;
+  topic?: unknown;
+  level?: unknown;
+  sourcePages?: unknown;
 };
 
 export type AiTrueFalseDraft = {
@@ -176,6 +187,9 @@ export type AiTrueFalseDraft = {
   statements?: Array<{ text?: unknown; answer?: unknown }>;
   points?: unknown;
   explanation?: unknown;
+  topic?: unknown;
+  level?: unknown;
+  sourcePages?: unknown;
 };
 
 export type AiFillBlankDraft = {
@@ -183,6 +197,9 @@ export type AiFillBlankDraft = {
   blanks?: Array<{ answer?: unknown }>;
   points?: unknown;
   explanation?: unknown;
+  topic?: unknown;
+  level?: unknown;
+  sourcePages?: unknown;
 };
 
 export type AiCalculationDraft = {
@@ -190,6 +207,11 @@ export type AiCalculationDraft = {
   answer?: unknown;
   points?: unknown;
   explanation?: unknown;
+  /** Biểu thức kiểm chứng độc lập — QC Engine sẽ tự tính lại để xác nhận đáp án. */
+  computation?: { expression?: unknown; expected?: unknown };
+  topic?: unknown;
+  level?: unknown;
+  sourcePages?: unknown;
 };
 
 export type AiEssayDraft = {
@@ -197,6 +219,9 @@ export type AiEssayDraft = {
   subParts?: Array<{ label?: unknown; content?: unknown; points?: unknown }>;
   rubric?: unknown;
   points?: unknown;
+  topic?: unknown;
+  level?: unknown;
+  sourcePages?: unknown;
 };
 
 export type AiExamDraft = {
@@ -215,7 +240,11 @@ export type AiExamDraft = {
 };
 
 export function aiGenerateExam(documents: AiDocumentPayload[], options: AiExamOptions) {
-  return post<{ draft: AiExamDraft }>({ action: 'generate-exam', documents, options });
+  return post<{ draft: AiExamDraft; knowledge?: KnowledgeStats }>({
+    action: 'generate-exam',
+    documents,
+    options,
+  });
 }
 
 /** Nhận diện chữ (OCR) một tài liệu scan/ảnh bằng AI đa phương thức. */

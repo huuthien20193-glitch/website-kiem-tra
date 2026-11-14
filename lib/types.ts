@@ -13,6 +13,21 @@ export type SubPart = {
   points: number;
 };
 
+/**
+ * Nguồn gốc câu hỏi do AI tạo (Knowledge Engine): chủ đề, mức độ nhận thức
+ * và trang tài liệu tham chiếu. Tất cả đều tùy chọn — đề thủ công không có.
+ */
+export type QuestionProvenance = {
+  /** Chủ đề của câu hỏi (suy từ kho kiến thức). */
+  topic?: string;
+  /** Mức độ nhận thức: 'nhận biết' | 'thông hiểu' | 'vận dụng' | 'vận dụng cao'. */
+  level?: string;
+  /** Số trang tài liệu tham chiếu khi tạo câu. */
+  sourcePages?: number[];
+  /** QC Engine đánh dấu câu cần giáo viên xem xét trước khi xuất bản. */
+  needsReview?: boolean;
+};
+
 export type EssayQuestion = {
   id: string | number;
   questionLabel: string;
@@ -20,7 +35,7 @@ export type EssayQuestion = {
   questionImage?: string;
   subParts: SubPart[];
   rubric?: string;
-};
+} & QuestionProvenance;
 
 /* ------------------------------------------------------------------ */
 /* Câu hỏi dạng mở rộng (AI soạn hoặc giáo viên thêm trực tiếp):       */
@@ -55,7 +70,7 @@ export type ExtraQuestion = {
   statements?: TrueFalseStatement[];
   /** Lời giải hiển thị cho học sinh sau khi nộp bài (khi giáo viên bật). */
   explanation?: McqExplanation;
-};
+} & QuestionProvenance;
 
 /** Kết quả chấm tự động của một câu hỏi mở rộng (lưu trong bài nộp). */
 export type ExtraDetail = {
@@ -90,7 +105,7 @@ export type McqQuestion = {
   options: string[];
   /** Ảnh minh họa của câu hỏi (tùy chọn, data URL). */
   image?: string;
-};
+} & QuestionProvenance;
 
 /** Lời giải một câu trắc nghiệm: text và/hoặc ảnh, giáo viên soạn khi tạo đề. */
 export type McqExplanation = {
@@ -125,7 +140,9 @@ export type ShortAnswerQuestion = {
   kind?: ShortAnswerKind;
   /** Lời giải hiển thị cho học sinh sau khi nộp bài (khi giáo viên bật công tắc). */
   explanation?: McqExplanation;
-};
+  /** Với kind 'calculation': biểu thức kiểm chứng độc lập do QC dùng để xác nhận đáp án. */
+  computation?: { expression: string; expected: number };
+} & QuestionProvenance;
 
 export type ExamType = 'official' | 'practice';
 

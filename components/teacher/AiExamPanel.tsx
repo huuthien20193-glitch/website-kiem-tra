@@ -13,7 +13,8 @@ import {
   type AiExamOptions,
   type AiLevelRatios,
 } from '@/lib/ai';
-import { checkDraft, summarizeIssues, type QualityIssue } from '@/lib/quality';
+import { checkDraft, markNeedsReview, summarizeIssues, type QualityIssue } from '@/lib/quality';
+import type { KnowledgeStats } from '@/lib/knowledge';
 import { AiKeyBanner } from './AiKeyBanner';
 import { useToast } from '@/components/ui/FeedbackProvider';
 
@@ -71,6 +72,8 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
   const [notes, setNotes] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
   const [issues, setIssues] = useState<QualityIssue[]>([]);
+  const [reviewCount, setReviewCount] = useState(0);
+  const [knowledge, setKnowledge] = useState<KnowledgeStats | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -155,11 +158,18 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
       };
 
       setPhase('generating');
-      const { draft } = await aiGenerateExam(payload, options);
+      const { draft, knowledge: knowledgeStats } = await aiGenerateExam(payload, options);
 
       setPhase('checking');
-      const found = checkDraft(draft);
+      // QC Engine: kiểm tra cấu trúc + căn cứ tài liệu + kiểm chứng câu tính toán.
+      const found = checkDraft(draft, {
+        documentsText: chosen.map((document) => document.content || '').join('\n'),
+        strictGrounding: useOnlyDocument,
+      });
+      const marked = markNeedsReview(draft, found);
       setIssues(found);
+      setReviewCount(marked);
+      setKnowledge(knowledgeStats ?? null);
       onApply(draft);
       const summary = summarizeIssues(found);
       if (found.some((issue) => issue.severity === 'error')) {
@@ -506,30 +516,41 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
               {error ? (
                 <div className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-700">
                   <CircleAlert className="mt-0.5 size-4 shrink-0" />
-                  {error}
+                  <p className="whitespace-pre-line">{error}</p>
                 </div>
               ) : null}
 
-              {/* Báo cáo tự kiểm tra sau khi AI soạn xong */}
-              {issues.length > 0 ? (
+              {/* Báo cáo kho kiến thức + tự kiểm tra sau khi AI soạn xong */}
+              {issues.length > 0 || knowledge ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                  <p className="flex items-center gap-2 text-xs font-bold text-amber-900">
-                    <ScanText className="size-4" />
-                    Kết quả tự kiểm tra: {summarizeIssues(issues)}
-                  </p>
-                  <ul className="mt-1.5 max-h-40 space-y-1 overflow-y-auto">
-                    {issues.slice(0, 12).map((issue, index) => (
-                      <li key={index} className="text-xs font-medium text-amber-800">
-                        <span className={issue.severity === 'error' ? 'font-bold text-rose-600' : 'font-bold text-amber-600'}>
-                          [{issue.severity === 'error' ? 'LỖI' : 'CẢNH BÁO'}]
-                        </span>{' '}
-                        {issue.questionLabel}: {issue.message}
-                      </li>
-                    ))}
-                    {issues.length > 12 ? (
-                      <li className="text-xs font-bold text-amber-700">... và {issues.length - 12} vấn đề khác</li>
-                    ) : null}
-                  </ul>
+                  {knowledge ? (
+                    <p className="text-xs font-semibold text-emerald-800">
+                      📚 Kho kiến thức: {knowledge.segmentCount} đoạn · {knowledge.documentCount} tài liệu ·{' '}
+                      {knowledge.words.toLocaleString('vi-VN')} từ — mỗi câu có kèm nguồn tham chiếu.
+                    </p>
+                  ) : null}
+                  {issues.length > 0 ? (
+                    <>
+                      <p className="mt-1 flex items-center gap-2 text-xs font-bold text-amber-900">
+                        <ScanText className="size-4" />
+                        Kết quả tự kiểm tra: {summarizeIssues(issues)}
+                        {reviewCount > 0 ? ` · ${reviewCount} câu được đánh dấu "cần xem xét"` : ''}
+                      </p>
+                      <ul className="mt-1.5 max-h-40 space-y-1 overflow-y-auto">
+                        {issues.slice(0, 12).map((issue, index) => (
+                          <li key={index} className="text-xs font-medium text-amber-800">
+                            <span className={issue.severity === 'error' ? 'font-bold text-rose-600' : 'font-bold text-amber-600'}>
+                              [{issue.severity === 'error' ? 'LỖI' : 'CẢNH BÁO'}]
+                            </span>{' '}
+                            {issue.questionLabel}: {issue.message}
+                          </li>
+                        ))}
+                        {issues.length > 12 ? (
+                          <li className="text-xs font-bold text-amber-700">... và {issues.length - 12} vấn đề khác</li>
+                        ) : null}
+                      </ul>
+                    </>
+                  ) : null}
                 </div>
               ) : null}
 

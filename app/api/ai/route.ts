@@ -1,4 +1,11 @@
 import { NextRequest } from 'next/server';
+import {
+  criticalProblems,
+  deriveKnowledgeSegments,
+  formatKnowledgeContext,
+  knowledgeStats,
+  selectKnowledge,
+} from '@/lib/knowledge';
 
 /**
  * API AI cho phần giáo viên — gọi Google Gemini.
@@ -506,6 +513,9 @@ const EXAM_JSON_SPEC = `Trả về DUY NHẤT một object JSON theo đúng cấ
       "content": "string - nội dung câu hỏi",
       "options": ["string A", "string B", "string C", "string D"],
       "correctIndex": 0,
+      "topic": "string - chủ đề của câu (theo đoạn kiến thức bạn dùng)",
+      "level": "string - một trong: nhận biết, thông hiểu, vận dụng, vận dụng cao",
+      "sourcePages": [3],
       "explanation": "string - giải thích ngắn gọn vì sao đáp án đúng"
     }
   ],
@@ -514,6 +524,9 @@ const EXAM_JSON_SPEC = `Trả về DUY NHẤT một object JSON theo đúng cấ
       "content": "string - câu hỏi yêu cầu chọn NHIỀU phương án đúng, ghi rõ 'chọn 2 đáp án' nếu cần",
       "options": ["string A", "string B", "string C", "string D"],
       "correctIndexes": [0, 2],
+      "topic": "string",
+      "level": "string",
+      "sourcePages": [4],
       "explanation": "string"
     }
   ],
@@ -526,6 +539,9 @@ const EXAM_JSON_SPEC = `Trả về DUY NHẤT một object JSON theo đúng cấ
         { "text": "string - ý nhận định c", "answer": true },
         { "text": "string - ý nhận định d", "answer": true }
       ],
+      "topic": "string",
+      "level": "string",
+      "sourcePages": [5],
       "explanation": "string - giải thích từng ý"
     }
   ],
@@ -533,6 +549,9 @@ const EXAM_JSON_SPEC = `Trả về DUY NHẤT một object JSON theo đúng cấ
     {
       "content": "string - câu có chỗ trống đánh dấu bằng ___, mỗi chỗ trống là 3 dấu gạch dưới liền nhau",
       "blanks": [ { "answer": "string - đáp án của chỗ trống thứ nhất" } ],
+      "topic": "string",
+      "level": "string",
+      "sourcePages": [6],
       "explanation": "string"
     }
   ],
@@ -540,17 +559,24 @@ const EXAM_JSON_SPEC = `Trả về DUY NHẤT một object JSON theo đúng cấ
     {
       "content": "string - đề bài tính toán",
       "answer": "số - kết quả cuối cùng, viết dạng số thuần (ví dụ 7.5 hoặc -3)",
+      "computation": { "expression": "biểu thức chỉ dùng số và + - * / ^ ( ) cho ra đáp án", "expected": 7.5 },
+      "topic": "string",
+      "level": "string",
+      "sourcePages": [7],
       "explanation": "string - trình bày các bước giải ngắn gọn"
     }
   ],
   "shortAnswers": [
-    { "content": "string", "answer": "string - đáp án đúng, nhiều biến thể cách nhau bởi |", "points": number, "explanation": "string" }
+    { "content": "string", "answer": "string - đáp án đúng, nhiều biến thể cách nhau bởi |", "points": number, "topic": "string", "level": "string", "sourcePages": [8], "explanation": "string" }
   ],
   "essays": [
     {
       "content": "string - đề bài chung",
       "subParts": [ { "label": "a", "content": "string", "points": number } ],
-      "rubric": "string - hướng dẫn chấm"
+      "rubric": "string - hướng dẫn chấm",
+      "topic": "string",
+      "level": "string",
+      "sourcePages": [9]
     }
   ]
 }`;
@@ -575,6 +601,9 @@ function buildExamSystemPrompt(): string {
     '- explanation ngắn gọn (1-3 câu), nêu được lý do đúng/sai.',
     '- Điểm các phần cộng lại đúng bằng totalPoints. shortAnswers/fillBlanks/calculations/essays mỗi câu có "points"; nếu giáo viên không yêu cầu riêng thì chia đều hợp lý (ví dụ 0.25/0.5 cho trắc nghiệm).',
     '- Độ khó phân bố theo các mức Nhận biết → Thông hiểu → Vận dụng → Vận dụng cao theo tỉ lệ được yêu cầu.',
+    '- MỖI câu phải ghi "topic" (chủ đề), "level" (một trong: nhận biết, thông hiểu, vận dụng, vận dụng cao) và "sourcePages" (mảng số trang của đoạn kiến thức bạn dùng — xem nhãn [KN-… · Tài liệu … · trang …] trong KHO KIẾN THỨC). Không bịa số trang.',
+    '- Khi ở chế độ CHỈ DÙNG TÀI LIỆU: chỉ dùng kiến thức trong KHO KIẾN THỨC; nếu kho quá ngắn để đủ số câu thì giảm số câu thay vì bịa kiến thức ngoài.',
+    '- calculations: kèm "computation": { "expression": "biểu thức CHỈ dùng số và + - * / ^ ( ) tính ra đáp án", "expected": số }. Hệ thống sẽ tự tính lại biểu thức để kiểm chứng đáp án.',
     '- Không nhắc lại tài liệu nguyên văn dài; viết lại câu hỏi theo cách của bạn.',
   ].join('\n');
 }
@@ -715,51 +744,190 @@ export async function POST(request: NextRequest) {
       const useOnlyDocument = options.useOnlyDocument !== false; // mặc định: chỉ dùng tài liệu
       const ratios = options.levelRatios ?? {};
 
-      // Tổng số câu hỏi để tính tỉ lệ từng mức độ.
-      const totalQuestions =
-        mcqCount + shortCount + essayCount + multiMcqCount + trueFalseCount + fillBlankCount + calculationCount;
+      // ---- Knowledge Engine: phân tích tài liệu thành các đoạn kiến thức ----
+      const { segments, problems } = deriveKnowledgeSegments(
+        documents.map((document) => ({ title: document.title, content: document.content })),
+      );
+      const blocking = criticalProblems(problems);
+      if (blocking.length > 0) {
+        // Đặc tả: KHÔNG tự tạo đề khi tài liệu chưa xử lý đầy đủ hoặc có lỗi nghiêm trọng.
+        const lines = blocking.map((problem) => `- ${problem.documentTitle}: ${problem.message}`);
+        return Response.json(
+          {
+            ok: false,
+            blocked: 'knowledge',
+            message: [
+              'Chưa thể soạn đề vì tài liệu có lỗi nghiêm trọng:',
+              ...lines,
+              'Hãy bấm "Nhận diện chữ bằng AI" để OCR lại tài liệu, hoặc thay tài liệu khác rồi thử lại.',
+            ].join('\n'),
+            problems,
+          },
+          { status: 422 },
+        );
+      }
+      const stats = knowledgeStats(segments);
+
+      // Tổng số câu để tính tỉ lệ từng mức độ nhận thức.
       const ratioSum =
         (ratios.recognize ?? 0) + (ratios.understand ?? 0) + (ratios.apply ?? 0) + (ratios.applyHigh ?? 0);
+      const ratioLine = (batchTotal: number) =>
+        ratioSum > 0 && batchTotal > 0
+          ? `- Tỉ lệ mức độ cho ${batchTotal} câu của nhóm này: Nhận biết ${Math.round(((ratios.recognize ?? 0) / ratioSum) * batchTotal)} câu, Thông hiểu ${Math.round(((ratios.understand ?? 0) / ratioSum) * batchTotal)} câu, Vận dụng ${Math.round(((ratios.apply ?? 0) / ratioSum) * batchTotal)} câu, Vận dụng cao ${Math.round(((ratios.applyHigh ?? 0) / ratioSum) * batchTotal)} câu (làm tròn cho khớp).`
+          : `- Độ khó: ${difficulty}.`;
 
-      const requestText = [
-        `Hãy soạn một đề kiểm tra ${examType} dựa trên các tài liệu trên với yêu cầu sau:`,
-        `- Môn: ${subject} — Khối lớp: ${grade} — Thời gian làm bài: ${duration} phút — Thang điểm: ${totalPoints}`,
-        topic ? `- Chủ đề tập trung: ${topic}` : '- Chủ đề: toàn bộ nội dung tài liệu, chọn các kiến thức trọng tâm.',
-        `- Phân bố câu hỏi: ${mcqCount} trắc nghiệm 1 đáp án, ${multiMcqCount} trắc nghiệm nhiều đáp án, ${trueFalseCount} đúng/sai, ${fillBlankCount} điền khuyết, ${shortCount} trả lời ngắn, ${calculationCount} tính toán, ${essayCount} tự luận (bỏ hẳn phần có số lượng = 0).`,
-        ratioSum > 0
-          ? `- Tỉ lệ mức độ theo tổng ${totalQuestions} câu: Nhận biết ${Math.round(((ratios.recognize ?? 0) / ratioSum) * totalQuestions)} câu, Thông hiểu ${Math.round(((ratios.understand ?? 0) / ratioSum) * totalQuestions)} câu, Vận dụng ${Math.round(((ratios.apply ?? 0) / ratioSum) * totalQuestions)} câu, Vận dụng cao ${Math.round(((ratios.applyHigh ?? 0) / ratioSum) * totalQuestions)} câu (làm tròn cho khớp tổng).`
-          : `- Độ khó: ${difficulty}.`,
+      // ---- Phân bổ điểm theo trọng số để tổng bằng thang điểm ----
+      const kindWeights: Array<{ key: string; count: number; weight: number }> = [
+        { key: 'mcq', count: mcqCount, weight: 1 },
+        { key: 'multiMcq', count: multiMcqCount, weight: 2 },
+        { key: 'trueFalse', count: trueFalseCount, weight: 4 },
+        { key: 'fillBlanks', count: fillBlankCount, weight: 2 },
+        { key: 'calculations', count: calculationCount, weight: 4 },
+        { key: 'shortAnswers', count: shortCount, weight: 2 },
+        { key: 'essays', count: essayCount, weight: 8 },
+      ];
+      const totalWeight = kindWeights.reduce((sum, kind) => sum + kind.count * kind.weight, 0);
+      const unit = totalWeight > 0 ? totalPoints / totalWeight : 0;
+      const kindPoints = new Map<string, number>(
+        kindWeights.map((kind) => [
+          kind.key,
+          Math.max(0.25, Math.round(unit * kind.weight * 4) / 4),
+        ]),
+      );
+      const pointsLine = (keys: string[]) =>
+        keys
+          .filter((key) => (kindWeights.find((kind) => kind.key === key)?.count ?? 0) > 0)
+          .map((key) => {
+            const label: Record<string, string> = {
+              mcq: 'trắc nghiệm',
+              multiMcq: 'TN nhiều đáp án',
+              trueFalse: 'đúng/sai',
+              fillBlanks: 'điền khuyết',
+              calculations: 'tính toán',
+              shortAnswers: 'trả lời ngắn',
+              essays: 'tự luận',
+            };
+            return `${label[key]} ${kindPoints.get(key)}đ/câu`;
+          })
+          .join(', ');
+
+      const sharedRequest = [
+        `Soạn đề kiểm tra ${examType} môn ${subject} — khối lớp ${grade} — thời gian ${duration} phút — thang điểm ${totalPoints}.`,
+        topic ? `Chủ đề tập trung: ${topic}.` : 'Chủ đề: toàn bộ nội dung kho kiến thức, chọn các kiến thức trọng tâm.',
         useOnlyDocument
-          ? '- CHẾ ĐỘ CHỈ DÙNG TÀI LIỆU: mọi câu hỏi phải xuất phát trực tiếp từ kiến thức có trong tài liệu. Nếu tài liệu quá ngắn, giảm số câu thay vì bịa kiến thức ngoài.'
-          : '- Được phép bổ sung kiến thức chuẩn của môn học để làm phong phú câu hỏi.',
-        notes ? `- Yêu cầu thêm của giáo viên: ${notes}` : '',
-        'Tổng điểm mọi phần phải bằng thang điểm trên.',
+          ? 'CHẾ ĐỘ CHỈ DÙNG TÀI LIỆU: mọi câu hỏi phải xuất phát trực tiếp từ kiến thức trong KHO KIẾN THỨC dưới đây.'
+          : 'Được phép bổ sung kiến thức chuẩn của môn học để làm phong phú câu hỏi (vẫn ưu tiên nội dung kho kiến thức).',
+        notes ? `Yêu cầu thêm của giáo viên: ${notes}` : '',
       ]
         .filter(Boolean)
         .join('\n');
 
-      // Model đôi khi trả JSON lệch nhẹ — thử tối đa 2 lần.
-      let draft: Record<string, unknown> | null = null;
-      let lastParseError: Error | null = null;
-      for (let attempt = 0; attempt < 2 && !draft; attempt += 1) {
-        const raw = await callGemini(
-          [...documentSection(documents), { text: requestText }],
-          buildExamSystemPrompt(),
-          true,
-          110_000,
-          body.apiKey,
+      // ---- Sinh đề theo từng nhóm nhỏ (batch) rồi ghép lại ----
+      type GenerationBatch = { requestLine: string; keys: string[]; total: number; rotate: number };
+      const batches: GenerationBatch[] = [];
+      const objectiveTotal = mcqCount + multiMcqCount;
+      if (objectiveTotal > 0) {
+        batches.push({
+          requestLine: `Nhóm 1: ${mcqCount} trắc nghiệm 1 đáp án (mảng "mcq") và ${multiMcqCount} trắc nghiệm nhiều đáp án (mảng "multiMcq") — bỏ hẳn mảng nào số lượng 0. Điểm gợi ý: ${pointsLine(['mcq', 'multiMcq'])}.`,
+          keys: ['mcq', 'multiMcq'],
+          total: objectiveTotal,
+          rotate: 0,
+        });
+      }
+      const shortTotal = trueFalseCount + fillBlankCount + calculationCount + shortCount;
+      if (shortTotal > 0) {
+        batches.push({
+          requestLine: `Nhóm 2: ${trueFalseCount} đúng/sai (mảng "trueFalse"), ${fillBlankCount} điền khuyết (mảng "fillBlanks"), ${calculationCount} tính toán (mảng "calculations"), ${shortCount} trả lời ngắn (mảng "shortAnswers") — bỏ hẳn mảng nào số lượng 0. Điểm gợi ý: ${pointsLine(['trueFalse', 'fillBlanks', 'calculations', 'shortAnswers'])}.`,
+          keys: ['trueFalse', 'fillBlanks', 'calculations', 'shortAnswers'],
+          total: shortTotal,
+          rotate: 1,
+        });
+      }
+      if (essayCount > 0) {
+        batches.push({
+          requestLine: `Nhóm 3: ${essayCount} câu tự luận (mảng "essays") với subParts và rubric. Điểm gợi ý: ${pointsLine(['essays'])}.`,
+          keys: ['essays'],
+          total: essayCount,
+          rotate: 2,
+        });
+      }
+      if (batches.length === 0) {
+        return Response.json(
+          { ok: false, message: 'Hãy chọn ít nhất một dạng câu hỏi để AI soạn.' },
+          { status: 400 },
         );
-        try {
-          draft = extractJson<Record<string, unknown>>(raw);
-        } catch (parseError) {
-          lastParseError = parseError instanceof Error ? parseError : new Error(String(parseError));
+      }
+
+      const merged: Record<string, unknown> = {
+        grade,
+        durationMinutes: duration,
+        totalPoints,
+      };
+      const QUESTION_KEYS = ['mcq', 'multiMcq', 'trueFalse', 'fillBlanks', 'calculations', 'shortAnswers', 'essays'];
+      let lastParseError: Error | null = null;
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+        const batch = batches[batchIndex];
+        // Mỗi batch chỉ nhận phần kho kiến thức cần thiết — không nhồi cả tài liệu lớn.
+        const knowledge = selectKnowledge(segments, topic, 2600, batch.rotate);
+        const knowledgeText = formatKnowledgeContext(knowledge);
+        const parts: GeminiPart[] = [];
+        if (knowledgeText) parts.push({ text: knowledgeText });
+        // Đính kèm nhị phân (ảnh/PDF gốc) để AI đối chiếu bảng, công thức, hình vẽ.
+        documents.forEach((document, documentIndex) => {
+          if (document.imageData) {
+            const imagePart = dataUrlParts(document.imageData);
+            if (imagePart) {
+              parts.push({ text: `Ảnh đính kèm TÀI LIỆU ${documentIndex + 1}: ${document.title || 'Không tên'}` });
+              parts.push(imagePart);
+            }
+          }
+          if (document.pdfData) {
+            parts.push({ text: `PDF gốc TÀI LIỆU ${documentIndex + 1}: ${document.title || 'Không tên'} (đối chiếu khi cần)` });
+            parts.push({ inline_data: { mime_type: 'application/pdf', data: document.pdfData } });
+          }
+        });
+
+        const requestText = [
+          sharedRequest,
+          batch.requestLine,
+          ratioLine(batch.total),
+          batchIndex === 0
+            ? 'Ngoài các mảng câu hỏi, trả thêm "title" (tên đề ngắn gọn) và "subject" (môn học).'
+            : 'CHỈ trả các mảng câu hỏi của nhóm này (không cần title/subject).',
+        ]
+          .filter(Boolean)
+          .join('\n');
+        parts.push({ text: requestText });
+
+        let parsedBatch: Record<string, unknown> | null = null;
+        for (let attempt = 0; attempt < 2 && !parsedBatch; attempt += 1) {
+          const raw = await callGemini(parts, buildExamSystemPrompt(), true, 110_000, body.apiKey);
+          try {
+            const extracted = extractJson<Record<string, unknown>>(raw);
+            parsedBatch = Array.isArray(extracted) ? (extracted[0] as Record<string, unknown>) : extracted;
+          } catch (parseError) {
+            lastParseError = parseError instanceof Error ? parseError : new Error(String(parseError));
+          }
         }
+        if (!parsedBatch) {
+          throw lastParseError ?? new Error('AI không trả về nhóm câu hỏi hợp lệ.');
+        }
+        // Ghép mảng câu hỏi của batch vào đề tổng hợp.
+        for (const key of QUESTION_KEYS) {
+          const items = parsedBatch[key];
+          if (Array.isArray(items) && items.length > 0) {
+            merged[key] = [...(Array.isArray(merged[key]) ? (merged[key] as unknown[]) : []), ...items];
+          }
+        }
+        if (!merged.title && parsedBatch.title) merged.title = parsedBatch.title;
+        if (parsedBatch.subject) merged.subject = parsedBatch.subject;
       }
-      if (!draft) {
-        throw lastParseError ?? new Error('AI không trả về đề hợp lệ.');
-      }
+      if (!merged.title) merged.title = `Đề kiểm tra ${subject !== 'Không chỉ định' ? subject : ''} — khối ${grade}`.trim();
+      if (!merged.subject) merged.subject = subject;
+
       // Kiểm tra + làm sạch cấu trúc đề trước khi trả về giao diện.
-      return Response.json({ ok: true, draft: normalizeExamDraft(draft) });
+      return Response.json({ ok: true, draft: normalizeExamDraft(merged), knowledge: stats });
     }
 
     if (body.action === 'ocr') {
@@ -790,6 +958,13 @@ export async function POST(request: NextRequest) {
       const instruction = (body.instruction || '').trim();
       const exclude = Array.isArray(body.exclude) ? body.exclude.filter((item) => typeof item === 'string').slice(0, 60) : [];
 
+      // Knowledge Engine: chọn đúng đoạn kiến thức theo chủ đề thay vì nhồi cả tài liệu.
+      const { segments } = deriveKnowledgeSegments(
+        documents.map((document) => ({ title: document.title, content: document.content })),
+      );
+      const knowledge = selectKnowledge(segments, topic || instruction, 2600, 0);
+      const knowledgeText = formatKnowledgeContext(knowledge);
+
       const requestText = [
         `Hãy tạo lại MỘT ${kindSpec} cho đề kiểm tra môn ${subject} — khối lớp ${grade}.`,
         topic ? `Chủ đề: ${topic}.` : '',
@@ -797,21 +972,34 @@ export async function POST(request: NextRequest) {
         exclude.length > 0
           ? `CÁC CÂU ĐÃ CÓ (không được trùng hoặc gần giống):\n${exclude.map((item, index) => `${index + 1}. ${item.slice(0, 200)}`).join('\n')}`
           : '',
+        'Ghi rõ "topic" (chủ đề), "level" (một trong: nhận biết, thông hiểu, vận dụng, vận dụng cao) và "sourcePages" (mảng số trang của đoạn kiến thức bạn dùng). Với câu tính toán, kèm thêm "computation": { "expression": "biểu thức chỉ dùng số và + - * / ^ ( )", "expected": số }.',
         'Trả về DUY NHẤT một object JSON của câu hỏi theo đúng cấu trúc loại câu hỏi trên.',
       ]
         .filter(Boolean)
         .join('\n');
 
+      const parts: GeminiPart[] = [];
+      if (knowledgeText) parts.push({ text: knowledgeText });
+      // Đính kèm nhị phân để AI đối chiếu bảng/công thức/hình khi tạo lại câu.
+      documents.forEach((document, documentIndex) => {
+        if (document.imageData) {
+          const imagePart = dataUrlParts(document.imageData);
+          if (imagePart) {
+            parts.push({ text: `Ảnh đính kèm TÀI LIỆU ${documentIndex + 1}: ${document.title || 'Không tên'}` });
+            parts.push(imagePart);
+          }
+        }
+        if (document.pdfData) {
+          parts.push({ text: `PDF gốc TÀI LIỆU ${documentIndex + 1}: ${document.title || 'Không tên'}` });
+          parts.push({ inline_data: { mime_type: 'application/pdf', data: document.pdfData } });
+        }
+      });
+      parts.push({ text: requestText });
+
       let question: Record<string, unknown> | null = null;
       let lastParseError: Error | null = null;
       for (let attempt = 0; attempt < 2 && !question; attempt += 1) {
-        const raw = await callGemini(
-          [...documentSection(documents), { text: requestText }],
-          REGENERATE_SYSTEM,
-          true,
-          110_000,
-          body.apiKey,
-        );
+        const raw = await callGemini(parts, REGENERATE_SYSTEM, true, 110_000, body.apiKey);
         try {
           const parsed = extractJson<Record<string, unknown>>(raw);
           // Model có thể bọc object trong mảng — lấy phần tử đầu.
