@@ -56,11 +56,19 @@ type AiDocument = {
 };
 
 type GenerateBody = {
-  action: 'summarize' | 'chat' | 'generate-exam' | 'validate-key';
+  action: 'summarize' | 'chat' | 'generate-exam' | 'validate-key' | 'ocr' | 'regenerate-question';
   apiKey?: string;
   documents?: AiDocument[];
   document?: AiDocument;
   messages?: ChatMessage[];
+  /** Dùng cho action 'regenerate-question'. */
+  kind?: string;
+  subject?: string;
+  grade?: number;
+  topic?: string;
+  instruction?: string;
+  /** Nội dung các câu hiện có để AI tránh trùng lặp. */
+  exclude?: string[];
   options?: {
     subject?: string;
     grade?: number;
@@ -69,9 +77,22 @@ type GenerateBody = {
     mcqCount?: number;
     shortAnswerCount?: number;
     essayCount?: number;
+    multiMcqCount?: number;
+    trueFalseCount?: number;
+    fillBlankCount?: number;
+    calculationCount?: number;
     difficulty?: string;
     notes?: string;
     examType?: string;
+    topic?: string;
+    /** Chỉ dùng kiến thức trong tài liệu. */
+    useOnlyDocument?: boolean;
+    levelRatios?: {
+      recognize?: number;
+      understand?: number;
+      apply?: number;
+      applyHigh?: number;
+    };
   };
 };
 
@@ -220,13 +241,260 @@ function extractJson<T>(text: string): T {
   }
 }
 
-/* ------------------------------ Prompts ------------------------------ */
+/* ------------------------------ Chuẩn hóa đề nháp ------------------------------ */
+
+type UnknownRecord = Record<string, unknown>;
+
+function toText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function toNumber(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/**
+ * Kiểm tra + làm sạch đề nháp AI trả về trước khi gửi về giao diện:
+ * cắt mảng theo giới hạn, bỏ câu rỗng, gạt câu trùng nội dung,
+ * đảm bảo số phương án/ý nhận định/chỗ trống hợp lệ, điểm là số dương.
+ * Không bịa thêm nội dung — chỉ lọc những gì model trả về.
+ */
+function normalizeExamDraft(raw: UnknownRecord): UnknownRecord {
+  const draft: UnknownRecord = { ...raw };
+
+  // ---- Trắc nghiệm 1 đáp án ----
+  if (Array.isArray(draft.mcq)) {
+    const seen = new Set<string>();
+    draft.mcq = (draft.mcq as UnknownRecord[])
+      .slice(0, 40)
+      .filter((item) => {
+        if (!item || typeof item !== 'object') return false;
+        const content = toText(item.content);
+        const options = Array.isArray(item.options) ? (item.options as unknown[]).map((option) => toText(option)) : [];
+        const key = `${content.toLowerCase()}|${options.join('|').toLowerCase()}`.slice(0, 150);
+        if (!content && !options.some(Boolean)) return false;
+        if (seen.has(key)) return false; // bỏ câu trùng nội dung
+        seen.add(key);
+        return true;
+      })
+      .map((item) => {
+        const options = Array.isArray(item.options)
+          ? (item.options as unknown[]).slice(0, 4).map((option) => toText(option))
+          : [];
+        while (options.length < 4) options.push('');
+        return {
+          ...item,
+          content: toText(item.content),
+          options,
+          correctIndex: Math.min(3, Math.max(0, Math.round(toNumber(item.correctIndex, 0)))),
+          explanation: toText(item.explanation),
+        };
+      });
+  }
+
+  // ---- Trắc nghiệm nhiều đáp án ----
+  if (Array.isArray(draft.multiMcq)) {
+    const seen = new Set<string>();
+    draft.multiMcq = (draft.multiMcq as UnknownRecord[])
+      .slice(0, 30)
+      .filter((item) => {
+        if (!item || typeof item !== 'object') return false;
+        const content = toText(item.content);
+        const key = content.toLowerCase().slice(0, 150);
+        if (!content) return false;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((item) => {
+        const options = Array.isArray(item.options)
+          ? (item.options as unknown[]).slice(0, 4).map((option) => toText(option))
+          : [];
+        while (options.length < 4) options.push('');
+        const correctIndexes = Array.isArray(item.correctIndexes)
+          ? [...new Set((item.correctIndexes as unknown[]).map((value) => Math.min(3, Math.max(0, Math.round(toNumber(value, 0))))))]
+          : [];
+        return {
+          ...item,
+          content: toText(item.content),
+          options,
+          correctIndexes,
+          points: Math.max(0.25, toNumber(item.points, 0.5)),
+          explanation: toText(item.explanation),
+        };
+      });
+  }
+
+  // ---- Đúng/Sai ----
+  if (Array.isArray(draft.trueFalse)) {
+    const seen = new Set<string>();
+    draft.trueFalse = (draft.trueFalse as UnknownRecord[])
+      .slice(0, 20)
+      .filter((item) => {
+        if (!item || typeof item !== 'object') return false;
+        const content = toText(item.content);
+        const key = content.toLowerCase().slice(0, 150);
+        if (!content && !Array.isArray(item.statements)) return false;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((item) => {
+        const statements = Array.isArray(item.statements)
+          ? (item.statements as UnknownRecord[]).slice(0, 4).map((statement) => ({
+              text: toText(statement?.text),
+              answer:
+                statement?.answer === true ||
+                statement?.answer === 'true' ||
+                statement?.answer === 'Đúng' ||
+                statement?.answer === 'đúng',
+            }))
+          : [];
+        return {
+          ...item,
+          content: toText(item.content),
+          statements,
+          points: Math.max(0.5, toNumber(item.points, 1)),
+          explanation: toText(item.explanation),
+        };
+      });
+  }
+
+  // ---- Điền khuyết: đảm bảo số chỗ trống ___ khớp số đáp án ----
+  if (Array.isArray(draft.fillBlanks)) {
+    const seen = new Set<string>();
+    draft.fillBlanks = (draft.fillBlanks as UnknownRecord[])
+      .slice(0, 20)
+      .filter((item) => {
+        if (!item || typeof item !== 'object') return false;
+        const content = toText(item.content);
+        const key = content.toLowerCase().slice(0, 150);
+        if (!content) return false;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((item) => {
+        const blankCount = (toText(item.content).match(/_{2,}/g) || []).length;
+        let blanks = Array.isArray(item.blanks) ? (item.blanks as UnknownRecord[]) : [];
+        blanks = blanks
+          .slice(0, Math.max(blankCount, 1))
+          .map((blank) => ({ answer: toText(blank?.answer) || toText(item.answer) || '' }));
+        return {
+          ...item,
+          content: toText(item.content),
+          blanks: blanks.map((blank) => ({ answer: blank.answer })),
+          points: Math.max(0.25, toNumber(item.points, 0.5)),
+          explanation: toText(item.explanation),
+        };
+      });
+  }
+
+  // ---- Tính toán ----
+  if (Array.isArray(draft.calculations)) {
+    const seen = new Set<string>();
+    draft.calculations = (draft.calculations as UnknownRecord[])
+      .slice(0, 20)
+      .filter((item) => {
+        if (!item || typeof item !== 'object') return false;
+        const content = toText(item.content);
+        const key = content.toLowerCase().slice(0, 150);
+        if (!content) return false;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((item) => ({
+        ...item,
+        content: toText(item.content),
+        answer: toText(item.answer),
+        points: Math.max(0.25, toNumber(item.points, 0.5)),
+        explanation: toText(item.explanation),
+      }));
+  }
+
+  // ---- Trả lời ngắn / tự luận ----
+  if (Array.isArray(draft.shortAnswers)) {
+    draft.shortAnswers = (draft.shortAnswers as UnknownRecord[])
+      .slice(0, 15)
+      .map((item) => ({
+        ...item,
+        content: toText(item.content),
+        answer: toText(item.answer),
+        points: Math.max(0.25, toNumber(item.points, 1)),
+        explanation: toText(item.explanation),
+      }))
+      .filter((item) => toText(item.content));
+  }
+  if (Array.isArray(draft.essays)) {
+    draft.essays = (draft.essays as UnknownRecord[])
+      .slice(0, 8)
+      .map((item) => ({
+        ...item,
+        content: toText(item.content),
+        subParts: Array.isArray(item.subParts)
+          ? (item.subParts as UnknownRecord[]).slice(0, 8).map((part, index) => ({
+              label: toText(part?.label) || String.fromCharCode(97 + index),
+              content: toText(part?.content),
+              points: Math.max(0.25, toNumber(part?.points, 1)),
+            }))
+          : [],
+        rubric: toText(item.rubric),
+        points: Math.max(0.5, toNumber(item.points, 2)),
+      }))
+      .filter((item) => toText(item.content) || (Array.isArray(item.subParts) && item.subParts.length > 0));
+  }
+
+  draft.title = toText(draft.title);
+  draft.subject = toText(draft.subject);
+  draft.durationMinutes = Math.min(300, Math.max(1, Math.round(toNumber(draft.durationMinutes, 45))));
+  draft.totalPoints = Math.max(1, toNumber(draft.totalPoints, 10));
+
+  return draft;
+}
+
+/* ------------------------------ Prompt OCR ------------------------------ */
+
+const OCR_SYSTEM = [
+  'Bạn là công cụ nhận diện chữ (OCR) chuyên đọc tài liệu học tập của giáo viên Việt Nam.',
+  'NHIỆM VỤ: chuyển toàn bộ nội dung tài liệu (kể cả chữ trong ảnh, bảng biểu, công thức) thành văn bản thuần.',
+  'TUYỆT ĐỐI KHÔNG bịa thêm, không giải thích, không tóm tắt, không nhận xét — chỉ sao chép nguyên văn nội dung có trong tài liệu.',
+  'Nếu một vùng nội dung mờ/không đọc được, ghi đúng một dòng [KHÔNG ĐỌC ĐƯỢC: phần mờ nằm giữa trang].',
+  'Nếu thấy hình vẽ/biểu đồ/sơ đồ, ghi một dòng [HÌNH ẢNH: mô tả ngắn hình đó] rồi tiếp tục phần chữ.',
+  'Bảng biểu: chuyển thành các dòng, mỗi dòng là một hàng với các ô cách nhau bởi dấu |.',
+  'Công thức toán/lý/hóa: giữ nguyên dạng ký hiệu thường (√, x², a/b, °C, H₂O), không dùng LaTeX.',
+  'Với PDF/ảnh nhiều trang: đặt dòng đánh dấu "===== TRANG n =====" ngay trước nội dung từng trang (n bắt đầu từ 1).',
+].join('\n');
+
+/* ------------------------------ Prompt tạo lại 1 câu ------------------------------ */
+
+const KIND_LABELS: Record<string, string> = {
+  mcq: 'câu trắc nghiệm 4 phương án A/B/C/D, CHỈ MỘT đáp án đúng (correctIndex 0..3)',
+  'multi-mcq': 'câu trắc nghiệm 4 phương án, có 2-3 đáp án đúng (correctIndexes là mảng 0..3)',
+  'true-false': 'câu đúng/sai gồm đúng 4 ý nhận định (statements: [{text, answer: true|false}])',
+  'fill-blank': 'câu điền khuyết có chỗ trống ___ (3 dấu gạch dưới) và blanks: [{answer}] đúng số chỗ trống',
+  short: 'câu trả lời ngắn (content, answer - nhiều biến thể cách nhau bởi |)',
+  calculation: 'câu tính toán có answer là SỐ kết quả cuối cùng (ví dụ "7.5")',
+  essay: 'câu tự luận (content, subParts: [{label, content, points}], rubric)',
+};
+
+const REGENERATE_SYSTEM = [
+  'Bạn là giáo viên Việt Nam giàu kinh nghiệm, đang soạn lại MỘT câu hỏi cho đề kiểm tra.',
+  'Chỉ trả về DUY NHẤT một object JSON của câu hỏi, không thêm chữ nào ngoài JSON.',
+  'Dựa CHÍNH XẠC trên nội dung tài liệu được cung cấp; không bịa kiến thức ngoài tài liệu khi không được phép.',
+  'Đáp án phải chính xác; tự kiểm tra lại trước khi trả về.',
+  'Không trùng với các câu hỏi đã có trong danh sách được cung cấp.',
+].join('\n');
+
+/* ------------------------------ Helpers ghép tài liệu ------------------------------ */
 
 function documentSection(documents: AiDocument[]): GeminiPart[] {
   return documents.flatMap((document, index) => partsFromDocument(document, index));
 }
 
-const EXAM_JSON_SPEC = `Trả về DUY NHẤT một object JSON theo đúng cấu trúc sau (không thêm chữ nào ngoài JSON):
+
+const EXAM_JSON_SPEC = `Trả về DUY NHẤT một object JSON theo đúng cấu trúc sau (không thêm chữ nào ngoài JSON). Bỏ hẳn mảng nào có số lượng = 0:
 {
   "title": "string - tên đề kiểm tra ngắn gọn",
   "subject": "string - một trong: Toán học, Tin học, Vật lý, Hóa học, Tiếng Anh, Ngữ văn, Sinh học, Lịch sử, Địa lý",
@@ -239,6 +507,40 @@ const EXAM_JSON_SPEC = `Trả về DUY NHẤT một object JSON theo đúng cấ
       "options": ["string A", "string B", "string C", "string D"],
       "correctIndex": 0,
       "explanation": "string - giải thích ngắn gọn vì sao đáp án đúng"
+    }
+  ],
+  "multiMcq": [
+    {
+      "content": "string - câu hỏi yêu cầu chọn NHIỀU phương án đúng, ghi rõ 'chọn 2 đáp án' nếu cần",
+      "options": ["string A", "string B", "string C", "string D"],
+      "correctIndexes": [0, 2],
+      "explanation": "string"
+    }
+  ],
+  "trueFalse": [
+    {
+      "content": "string - đề dẫn chung",
+      "statements": [
+        { "text": "string - ý nhận định a", "answer": true },
+        { "text": "string - ý nhận định b", "answer": false },
+        { "text": "string - ý nhận định c", "answer": true },
+        { "text": "string - ý nhận định d", "answer": true }
+      ],
+      "explanation": "string - giải thích từng ý"
+    }
+  ],
+  "fillBlanks": [
+    {
+      "content": "string - câu có chỗ trống đánh dấu bằng ___, mỗi chỗ trống là 3 dấu gạch dưới liền nhau",
+      "blanks": [ { "answer": "string - đáp án của chỗ trống thứ nhất" } ],
+      "explanation": "string"
+    }
+  ],
+  "calculations": [
+    {
+      "content": "string - đề bài tính toán",
+      "answer": "số - kết quả cuối cùng, viết dạng số thuần (ví dụ 7.5 hoặc -3)",
+      "explanation": "string - trình bày các bước giải ngắn gọn"
     }
   ],
   "shortAnswers": [
@@ -256,16 +558,23 @@ const EXAM_JSON_SPEC = `Trả về DUY NHẤT một object JSON theo đúng cấ
 function buildExamSystemPrompt(): string {
   return [
     'Bạn là một giáo viên Việt Nam giàu kinh nghiệm chuyên soạn đề kiểm tra cho học sinh phổ thông.',
-    'Dựa CHÍNH XẠC trên nội dung tài liệu được cung cấp (bám sát kiến thức trong tài liệu, không bịa ra kiến thức ngoài chương trình).',
+    'Dựa CHÍNH XẠC trên nội dung tài liệu được cung cấp. Khi yêu cầu "chỉ dùng tài liệu", tuyệt đối không bịa kiến thức ngoài tài liệu.',
     'Sử dụng tiếng Việt tự nhiên (trừ câu hỏi tiếng Anh nếu môn là Tiếng Anh).',
-    'Khi có tài liệu ảnh hoặc PDF scan, hãy đọc kỹ nội dung trong đó (kể cả công thức, hình vẽ).',
+    'Khi có tài liệu ảnh hoặc PDF scan, hãy đọc kỹ nội dung trong đó (kể cả công thức, hình vẽ, bảng biểu).',
+    'Công thức toán viết bằng ký hiệu thường: x², √5, a/b, (x+1)³ — không dùng LaTeX.',
     EXAM_JSON_SPEC,
-    'Quy tắc:',
-    '- correctIndex là số 0..3 (0=A, 1=B, 2=C, 3=D). Phân bổ đáp án ngẫu nhiên tự nhiên giữa các phương án, không dồn về A.',
-    '- Mỗi câu trắc nghiệm có đúng 4 phương án, chỉ một phương án đúng, các phương án gây nhiễu hợp lý.',
-    '- explanation ngắn gọn (1-2 câu).',
-    '- Điểm các phần cộng lại đúng bằng totalPoints. Nếu mcq có N câu thì mỗi câu mcq có điểm = mcqPointsPerQ (tự tính để gọn: ví dụ 0.25/0.5). shortAnswers + essays mỗi câu có "points".',
-    '- Độ khó theo yêu cầu: dễ (nhận biết), trung bình (nhận biết + thông hiểu), khó (vận dụng), hoặc phân bố theo yêu cầu trong ghi chú.',
+    'Quy tắc bắt buộc:',
+    '- mcq.correctIndex là số 0..3 (0=A, 1=B, 2=C, 3=D). Phân bổ đáp án ngẫu nhiên tự nhiên giữa các phương án, không dồn về A.',
+    '- Mỗi câu mcq/multiMcq có đúng 4 phương án; mcq chỉ MỘT phương án đúng; multiMcq có từ 2 đến 3 phương án đúng (correctIndexes là mảng các số 0..3).',
+    '- Mỗi câu trueFalse có đúng 4 ý nhận định a, b, c, d với answer là true/false; các ý bám sát nội dung tài liệu, không ghi nhận định gây hiểu lầm.',
+    '- fillBlanks: mỗi chỗ trống trong content phải là ___ (3 dấu gạch dưới) và số phần tử của blanks phải BẰNG số chỗ trống, đúng thứ tự.',
+    '- calculations: answer chỉ ghi KẾT QUẢ SỐ cuối cùng (ví dụ "7.5"); các bước giải viết trong explanation.',
+    '- Không tạo 2 câu trùng nội dung; không để một câu tiết lộ đáp án của câu khác.',
+    '- Đáp án phải chính xác theo toán học/khoa học — TRƯỚC KHI TRẢ VỀ, hãy tự kiểm tra lại từng đáp án và lời giải; nếu phát hiện sai thì sửa rồi mới trả JSON.',
+    '- Các phương án gây nhiễu phải hợp lý (cùng dạng, cùng đơn vị, dễ nhầm nhưng sai rõ ràng).',
+    '- explanation ngắn gọn (1-3 câu), nêu được lý do đúng/sai.',
+    '- Điểm các phần cộng lại đúng bằng totalPoints. shortAnswers/fillBlanks/calculations/essays mỗi câu có "points"; nếu giáo viên không yêu cầu riêng thì chia đều hợp lý (ví dụ 0.25/0.5 cho trắc nghiệm).',
+    '- Độ khó phân bố theo các mức Nhận biết → Thông hiểu → Vận dụng → Vận dụng cao theo tỉ lệ được yêu cầu.',
     '- Không nhắc lại tài liệu nguyên văn dài; viết lại câu hỏi theo cách của bạn.',
   ].join('\n');
 }
@@ -391,6 +700,10 @@ export async function POST(request: NextRequest) {
       const mcqCount = Math.max(0, Math.min(40, Math.round(options.mcqCount ?? 10)));
       const shortCount = Math.max(0, Math.min(15, Math.round(options.shortAnswerCount ?? 2)));
       const essayCount = Math.max(0, Math.min(8, Math.round(options.essayCount ?? 1)));
+      const multiMcqCount = Math.max(0, Math.min(15, Math.round(options.multiMcqCount ?? 0)));
+      const trueFalseCount = Math.max(0, Math.min(10, Math.round(options.trueFalseCount ?? 0)));
+      const fillBlankCount = Math.max(0, Math.min(15, Math.round(options.fillBlankCount ?? 0)));
+      const calculationCount = Math.max(0, Math.min(15, Math.round(options.calculationCount ?? 0)));
       const subject = options.subject || 'Không chỉ định';
       const grade = options.grade || 9;
       const duration = Math.round(options.durationMinutes ?? 45);
@@ -398,12 +711,27 @@ export async function POST(request: NextRequest) {
       const difficulty = options.difficulty || 'trung bình';
       const examType = options.examType === 'practice' ? 'ôn tập/luyện tập' : 'chính thức';
       const notes = (options.notes || '').trim();
+      const topic = (options.topic || '').trim();
+      const useOnlyDocument = options.useOnlyDocument !== false; // mặc định: chỉ dùng tài liệu
+      const ratios = options.levelRatios ?? {};
+
+      // Tổng số câu hỏi để tính tỉ lệ từng mức độ.
+      const totalQuestions =
+        mcqCount + shortCount + essayCount + multiMcqCount + trueFalseCount + fillBlankCount + calculationCount;
+      const ratioSum =
+        (ratios.recognize ?? 0) + (ratios.understand ?? 0) + (ratios.apply ?? 0) + (ratios.applyHigh ?? 0);
 
       const requestText = [
         `Hãy soạn một đề kiểm tra ${examType} dựa trên các tài liệu trên với yêu cầu sau:`,
         `- Môn: ${subject} — Khối lớp: ${grade} — Thời gian làm bài: ${duration} phút — Thang điểm: ${totalPoints}`,
-        `- Phân bố: ${mcqCount} câu trắc nghiệm, ${shortCount} câu trả lời ngắn, ${essayCount} câu tự luận (bỏ hẳn phần có số lượng = 0).`,
-        `- Độ khó: ${difficulty}.`,
+        topic ? `- Chủ đề tập trung: ${topic}` : '- Chủ đề: toàn bộ nội dung tài liệu, chọn các kiến thức trọng tâm.',
+        `- Phân bố câu hỏi: ${mcqCount} trắc nghiệm 1 đáp án, ${multiMcqCount} trắc nghiệm nhiều đáp án, ${trueFalseCount} đúng/sai, ${fillBlankCount} điền khuyết, ${shortCount} trả lời ngắn, ${calculationCount} tính toán, ${essayCount} tự luận (bỏ hẳn phần có số lượng = 0).`,
+        ratioSum > 0
+          ? `- Tỉ lệ mức độ theo tổng ${totalQuestions} câu: Nhận biết ${Math.round(((ratios.recognize ?? 0) / ratioSum) * totalQuestions)} câu, Thông hiểu ${Math.round(((ratios.understand ?? 0) / ratioSum) * totalQuestions)} câu, Vận dụng ${Math.round(((ratios.apply ?? 0) / ratioSum) * totalQuestions)} câu, Vận dụng cao ${Math.round(((ratios.applyHigh ?? 0) / ratioSum) * totalQuestions)} câu (làm tròn cho khớp tổng).`
+          : `- Độ khó: ${difficulty}.`,
+        useOnlyDocument
+          ? '- CHẾ ĐỘ CHỈ DÙNG TÀI LIỆU: mọi câu hỏi phải xuất phát trực tiếp từ kiến thức có trong tài liệu. Nếu tài liệu quá ngắn, giảm số câu thay vì bịa kiến thức ngoài.'
+          : '- Được phép bổ sung kiến thức chuẩn của môn học để làm phong phú câu hỏi.',
         notes ? `- Yêu cầu thêm của giáo viên: ${notes}` : '',
         'Tổng điểm mọi phần phải bằng thang điểm trên.',
       ]
@@ -430,7 +758,72 @@ export async function POST(request: NextRequest) {
       if (!draft) {
         throw lastParseError ?? new Error('AI không trả về đề hợp lệ.');
       }
-      return Response.json({ ok: true, draft });
+      // Kiểm tra + làm sạch cấu trúc đề trước khi trả về giao diện.
+      return Response.json({ ok: true, draft: normalizeExamDraft(draft) });
+    }
+
+    if (body.action === 'ocr') {
+      const document = body.document;
+      if (!document) {
+        return Response.json({ ok: false, message: 'Thiếu tài liệu cần nhận diện chữ.' }, { status: 400 });
+      }
+      const text = await callGemini(partsFromDocument(document, 0), OCR_SYSTEM, false, 110_000, body.apiKey);
+      return Response.json({ ok: true, text });
+    }
+
+    if (body.action === 'regenerate-question') {
+      const documents = Array.isArray(body.documents) ? body.documents : [];
+      if (documents.length === 0) {
+        return Response.json(
+          { ok: false, message: 'Thiếu tài liệu để tạo lại câu hỏi.' },
+          { status: 400 },
+        );
+      }
+      const kind = (body.kind || '').trim();
+      const kindSpec = KIND_LABELS[kind];
+      if (!kindSpec) {
+        return Response.json({ ok: false, message: 'Loại câu hỏi không hợp lệ.' }, { status: 400 });
+      }
+      const subject = body.subject || 'Không chỉ định';
+      const grade = body.grade || 9;
+      const topic = (body.topic || '').trim();
+      const instruction = (body.instruction || '').trim();
+      const exclude = Array.isArray(body.exclude) ? body.exclude.filter((item) => typeof item === 'string').slice(0, 60) : [];
+
+      const requestText = [
+        `Hãy tạo lại MỘT ${kindSpec} cho đề kiểm tra môn ${subject} — khối lớp ${grade}.`,
+        topic ? `Chủ đề: ${topic}.` : '',
+        instruction ? `Yêu cầu thêm của giáo viên: ${instruction}` : '',
+        exclude.length > 0
+          ? `CÁC CÂU ĐÃ CÓ (không được trùng hoặc gần giống):\n${exclude.map((item, index) => `${index + 1}. ${item.slice(0, 200)}`).join('\n')}`
+          : '',
+        'Trả về DUY NHẤT một object JSON của câu hỏi theo đúng cấu trúc loại câu hỏi trên.',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      let question: Record<string, unknown> | null = null;
+      let lastParseError: Error | null = null;
+      for (let attempt = 0; attempt < 2 && !question; attempt += 1) {
+        const raw = await callGemini(
+          [...documentSection(documents), { text: requestText }],
+          REGENERATE_SYSTEM,
+          true,
+          110_000,
+          body.apiKey,
+        );
+        try {
+          const parsed = extractJson<Record<string, unknown>>(raw);
+          // Model có thể bọc object trong mảng — lấy phần tử đầu.
+          question = Array.isArray(parsed) ? (parsed[0] as Record<string, unknown>) : parsed;
+        } catch (parseError) {
+          lastParseError = parseError instanceof Error ? parseError : new Error(String(parseError));
+        }
+      }
+      if (!question) {
+        throw lastParseError ?? new Error('AI không trả về câu hỏi hợp lệ.');
+      }
+      return Response.json({ ok: true, question });
     }
 
     return Response.json({ ok: false, message: 'Hành động không được hỗ trợ.' }, { status: 400 });

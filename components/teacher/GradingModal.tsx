@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Award, CheckCircle2, CircleX, Save, ZoomIn } from 'lucide-react';
 import type { Submission } from '@/lib/types';
-import { OPTION_LABELS } from '@/lib/types';
+import { EXTRA_KIND_LABELS, OPTION_LABELS } from '@/lib/types';
 import { cn, formatNumber, initials, round1 } from '@/lib/utils';
 // Modal + Button dùng chung: lo phần a11y (role dialog, aria-modal, Esc, focus trap) và khóa cuộn.
 import { Button, Modal } from '@/components/ui';
@@ -113,8 +113,15 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
   const shortAnswerTotal = round1(
     shortAnswerDetails.reduce((sum, detail) => sum + (detail.score || 0), 0),
   );
-  const mcqScore = Math.max(0, round1((submission.autoScore || 0) - shortAnswerTotal));
+  // Câu hỏi mở rộng (TN nhiều đáp án, Đúng/Sai) đã nằm trong autoScore.
+  const extraDetails = submission.extraDetails || [];
+  const extraScore = round1(extraDetails.reduce((sum, detail) => sum + (detail.score || 0), 0));
+  const mcqScore = Math.max(
+    0,
+    round1((submission.autoScore || 0) - shortAnswerTotal - extraScore),
+  );
   const hasShortAnswers = shortAnswerDetails.length > 0;
+  const hasExtras = extraDetails.length > 0;
   const finalTotal = round1((submission.autoScore || 0) + essayTotal);
 
   const updatePartScore = (questionId: string | number, partIndex: number, rawValue: string, partMax: number) => {
@@ -215,6 +222,15 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Trắc nghiệm</p>
                 <p className="text-sm font-bold text-slate-800">{formatNumber(mcqScore)}đ</p>
               </div>
+              {hasExtras ? (
+                <>
+                  <div className="h-8 w-px bg-slate-200" />
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Mở rộng</p>
+                    <p className="text-sm font-bold text-slate-800">{formatNumber(extraScore)}đ</p>
+                  </div>
+                </>
+              ) : null}
               {hasShortAnswers ? (
                 <>
                   <div className="h-8 w-px bg-slate-200" />
@@ -296,11 +312,73 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
             )}
           </div>
 
+          {hasExtras ? (
+            <div className="rounded-2xl border border-violet-200 bg-white p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-violet-800">
+                  Phần 2 · Trắc nghiệm mở rộng
+                </h3>
+                <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">
+                  {extraDetails.filter((detail) => detail.correct).length}/
+                  {extraDetails.length} câu đúng · {formatNumber(extraScore)}đ
+                </span>
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {extraDetails.map((detail, index) => (
+                  <div
+                    key={`${detail.questionId}-${index}`}
+                    className={cn(
+                      'rounded-xl border p-3',
+                      detail.correct ? 'border-emerald-200 bg-emerald-50/50' : 'border-rose-200 bg-rose-50/50',
+                    )}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {detail.correct ? (
+                          <CheckCircle2 className="size-4 text-emerald-600" />
+                        ) : (
+                          <CircleX className="size-4 text-rose-500" />
+                        )}
+                        <span className="text-xs font-bold text-slate-800">{detail.questionLabel}</span>
+                        <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[11px] font-bold text-white">
+                          {EXTRA_KIND_LABELS[detail.kind] ?? detail.kind}
+                        </span>
+                      </div>
+                      <span className={cn('text-xs font-bold', detail.correct ? 'text-emerald-700' : 'text-rose-600')}>
+                        {formatNumber(detail.score)}/{formatNumber(detail.maxPoints)}đ
+                      </span>
+                    </div>
+                    {detail.questionContent ? (
+                      <p className="mt-1.5 whitespace-pre-line text-xs font-medium leading-relaxed text-slate-600">
+                        {detail.questionContent}
+                      </p>
+                    ) : null}
+                    <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
+                      <p className="rounded-lg bg-white/70 px-2.5 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-100">
+                        Học sinh:{' '}
+                        <span className={cn('font-bold', detail.correct ? 'text-emerald-700' : 'text-rose-600')}>
+                          {detail.studentAnswer || 'Bỏ trống'}
+                        </span>
+                      </p>
+                      {!detail.correct ? (
+                        <p className="rounded-lg bg-white/70 px-2.5 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-100">
+                          Đáp án:{' '}
+                          <span className="font-bold text-emerald-700">{detail.correctAnswer}</span>
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {hasShortAnswers ? (
             <div className="rounded-2xl border border-sky-200 bg-white p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-xs font-bold uppercase tracking-wide text-sky-800">
-                  Phần 2 · Trả lời ngắn
+                  Phần {hasExtras ? 3 : 2} · Trả lời ngắn
                 </h3>
                 <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
                   {shortAnswerDetails.filter((detail) => detail.correct).length}/
@@ -380,7 +458,7 @@ export function GradingModal({ submission, onClose, onSave }: GradingModalProps)
           ) : (
             <div className="space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600">
-                Phần {hasShortAnswers ? 3 : 2} · Tự luận ({submission.essayDetails.length} câu)
+                Phần {2 + (hasShortAnswers ? 1 : 0) + (hasExtras ? 1 : 0)} · Tự luận ({submission.essayDetails.length} câu)
               </h3>
 
               {submission.essayDetails.map((detail, index) => (

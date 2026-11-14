@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronDown, CircleAlert, LoaderCircle, Sparkles } from 'lucide-react';
+import { ChevronDown, CircleAlert, LoaderCircle, ScanText, Sparkles } from 'lucide-react';
 import type { TeacherDocument } from '@/lib/types';
 import { SUBJECTS } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -11,7 +11,9 @@ import {
   aiReadiness,
   type AiExamDraft,
   type AiExamOptions,
+  type AiLevelRatios,
 } from '@/lib/ai';
+import { checkDraft, summarizeIssues, type QualityIssue } from '@/lib/quality';
 import { AiKeyBanner } from './AiKeyBanner';
 import { useToast } from '@/components/ui/FeedbackProvider';
 
@@ -29,6 +31,22 @@ const DIFFICULTIES = [
   { value: 'phân bố từ dễ đến khó tăng dần', label: 'Tăng dần' },
 ];
 
+const LEVEL_FIELDS: Array<{ key: keyof AiLevelRatios; label: string }> = [
+  { key: 'recognize', label: 'Nhận biết' },
+  { key: 'understand', label: 'Thông hiểu' },
+  { key: 'apply', label: 'Vận dụng' },
+  { key: 'applyHigh', label: 'VD cao' },
+];
+
+/** Các bước tiến trình hiển thị khi AI đang soạn đề. */
+const PHASES = [
+  { key: 'sending', label: 'Đang gửi tài liệu cho AI...' },
+  { key: 'generating', label: 'AI đang đọc tài liệu và soạn câu hỏi, đáp án, lời giải...' },
+  { key: 'checking', label: 'Đang tự kiểm tra chất lượng câu hỏi...' },
+] as const;
+
+type Phase = (typeof PHASES)[number]['key'] | 'idle';
+
 export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -38,12 +56,21 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [subject, setSubject] = useState(defaults.subject);
   const [grade, setGrade] = useState(defaults.grade);
+  const [topic, setTopic] = useState('');
+  const [useOnlyDocument, setUseOnlyDocument] = useState(true);
   const [mcqCount, setMcqCount] = useState(10);
+  const [multiMcqCount, setMultiMcqCount] = useState(0);
+  const [trueFalseCount, setTrueFalseCount] = useState(0);
+  const [fillBlankCount, setFillBlankCount] = useState(0);
   const [shortCount, setShortCount] = useState(2);
+  const [calculationCount, setCalculationCount] = useState(0);
   const [essayCount, setEssayCount] = useState(1);
+  const [useLevelRatios, setUseLevelRatios] = useState(false);
+  const [ratios, setRatios] = useState<AiLevelRatios>({ recognize: 25, understand: 30, apply: 30, applyHigh: 15 });
   const [difficulty, setDifficulty] = useState(DIFFICULTIES[1].value);
   const [notes, setNotes] = useState('');
-  const [generating, setGenerating] = useState(false);
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [issues, setIssues] = useState<QualityIssue[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -72,20 +99,29 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
     });
   };
 
+  const totalQuestions =
+    mcqCount + shortCount + essayCount + multiMcqCount + trueFalseCount + fillBlankCount + calculationCount;
+  const ratioSum = ratios.recognize + ratios.understand + ratios.apply + ratios.applyHigh;
+
   const generate = async () => {
-    if (generating) return;
+    if (phase !== 'idle') return;
     const chosen = documents.filter((document) => effectiveSelected.has(document.id));
     if (chosen.length === 0) {
       setError('Hãy chọn ít nhất một tài liệu để AI dựa vào đó soạn đề.');
       return;
     }
-    if (mcqCount + shortCount + essayCount === 0) {
+    if (totalQuestions === 0) {
       setError('Số lượng câu hỏi phải lớn hơn 0.');
+      return;
+    }
+    if (useLevelRatios && ratioSum <= 0) {
+      setError('Tổng tỉ lệ các mức độ phải lớn hơn 0%.');
       return;
     }
 
     setError(null);
-    setGenerating(true);
+    setIssues([]);
+    setPhase('sending');
     try {
       // Chỉ gửi kèm dữ liệu nhị phân của 3 tài liệu đầu (ảnh/PDF scan).
       let binaryBudget = 3;
@@ -106,22 +142,46 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
         mcqCount,
         shortAnswerCount: shortCount,
         essayCount,
-        difficulty,
+        multiMcqCount,
+        trueFalseCount,
+        fillBlankCount,
+        calculationCount,
+        difficulty: useLevelRatios ? 'phân bố theo tỉ lệ mức độ' : difficulty,
         examType: defaults.examType,
         notes,
+        topic,
+        useOnlyDocument,
+        levelRatios: useLevelRatios ? ratios : undefined,
       };
 
+      setPhase('generating');
       const { draft } = await aiGenerateExam(payload, options);
+
+      setPhase('checking');
+      const found = checkDraft(draft);
+      setIssues(found);
       onApply(draft);
-      toast.success('AI đã soạn xong đề nháp', 'Kiểm tra lại nội dung rồi công bố cho học sinh nhé.');
+      const summary = summarizeIssues(found);
+      if (found.some((issue) => issue.severity === 'error')) {
+        toast.warning(
+          'AI đã soạn xong nhưng có vấn đề cần kiểm tra',
+          `${summary} — xem báo cáo bên dưới và sửa từng câu trong form.`,
+        );
+      } else {
+        toast.success(
+          'AI đã soạn xong đề nháp',
+          summary ? `Tự kiểm tra: ${summary}. Hãy xem lại trước khi công bố.` : 'Đã qua tự kiểm tra — xem lại rồi công bố nhé.',
+        );
+      }
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'AI gặp sự cố, vui lòng thử lại.');
     } finally {
-      setGenerating(false);
+      setPhase('idle');
     }
   };
 
   const notConfigured = aiConfigured === false || (aiConfigured === true && keyValid === false);
+  const generating = phase !== 'idle';
 
   if (notConfigured) {
     return (
@@ -160,7 +220,7 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-bold text-white">AI soạn đề từ tài liệu</span>
           <span className="block text-xs font-medium text-violet-100">
-            Chọn tài liệu → AI tự viết câu hỏi, đáp án và lời giải điền thẳng vào form bên dưới
+            7 dạng câu hỏi · chọn mức độ theo tỉ lệ · tự kiểm tra trước khi điền vào form
           </span>
         </span>
         <ChevronDown
@@ -216,7 +276,7 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
                           <span className="block truncate text-xs font-bold text-slate-800">{document.title}</span>
                           <span className="block truncate text-xs font-medium text-slate-500">
                             {document.content.trim()
-                              ? `${document.content.trim().split(/\s+/).length} từ · ${document.fileName}`
+                              ? `${document.content.trim().split(/\s+/).length} từ${document.pageCount ? ` · ${document.pageCount} trang` : ''} · ${document.fileName}`
                               : `${document.fileName} · AI đọc trực tiếp nội dung ${document.fileType === 'image' ? 'ảnh' : 'PDF scan'}`}
                           </span>
                         </span>
@@ -256,12 +316,132 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-emerald-700 outline-none focus:border-violet-400 focus:bg-white"
                     />
                   </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-bold text-slate-500">Độ khó</label>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-bold text-slate-500">Chủ đề / chương (tùy chọn)</label>
+                    <input
+                      type="text"
+                      value={topic}
+                      onChange={(event) => setTopic(event.target.value)}
+                      placeholder="Ví dụ: Chương 3 — Phương trình bậc hai (để trống = toàn bộ tài liệu)"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-violet-400 focus:bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* 7 dạng câu hỏi */}
+                <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-7">
+                  {[
+                    { label: 'TN', value: mcqCount, set: setMcqCount, max: 40, color: 'text-slate-700 focus:border-violet-400' },
+                    { label: 'TN nhiều ĐA', value: multiMcqCount, set: setMultiMcqCount, max: 15, color: 'text-indigo-700 focus:border-indigo-400' },
+                    { label: 'Đúng/Sai', value: trueFalseCount, set: setTrueFalseCount, max: 10, color: 'text-rose-700 focus:border-rose-400' },
+                    { label: 'Điền khuyết', value: fillBlankCount, set: setFillBlankCount, max: 15, color: 'text-cyan-700 focus:border-cyan-400' },
+                    { label: 'TLN', value: shortCount, set: setShortCount, max: 15, color: 'text-sky-700 focus:border-sky-400' },
+                    { label: 'Tính toán', value: calculationCount, set: setCalculationCount, max: 15, color: 'text-teal-700 focus:border-teal-400' },
+                    { label: 'TL', value: essayCount, set: setEssayCount, max: 8, color: 'text-amber-700 focus:border-amber-400' },
+                  ].map((field) => (
+                    <div key={field.label}>
+                      <label className="mb-1 block text-center text-xs font-bold text-slate-500">{field.label}</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={field.max}
+                        value={field.value}
+                        onChange={(event) => field.set(Math.max(0, Math.min(field.max, Number(event.target.value) || 0)))}
+                        className={cn(
+                          'w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-bold outline-none focus:bg-white',
+                          field.color,
+                        )}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs font-medium text-slate-500">
+                  Tổng: <strong>{totalQuestions}</strong> câu · Điền 0 cho dạng không muốn dùng.
+                </p>
+              </div>
+
+              {/* Mức độ */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-bold text-slate-700">Mức độ câu hỏi</p>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={useLevelRatios}
+                    onClick={() => setUseLevelRatios((current) => !current)}
+                    className={cn(
+                      'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition',
+                      useLevelRatios
+                        ? 'border-violet-300 bg-violet-50 text-violet-700'
+                        : 'border-slate-200 bg-white text-slate-500',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'relative h-4 w-7 rounded-full transition',
+                        useLevelRatios ? 'bg-violet-500' : 'bg-slate-300',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'absolute top-0.5 size-3 rounded-full bg-white shadow-sm transition-all',
+                          useLevelRatios ? 'left-3.5' : 'left-0.5',
+                        )}
+                      />
+                    </span>
+                    {useLevelRatios ? 'Theo tỉ lệ 4 mức' : 'Theo độ khó chung'}
+                  </button>
+                </div>
+
+                {useLevelRatios ? (
+                  <>
+                    <div className="mt-3 grid grid-cols-4 gap-2">
+                      {LEVEL_FIELDS.map((field) => (
+                        <div key={field.key}>
+                          <label className="mb-1 block text-center text-xs font-bold text-slate-500">{field.label} (%)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={ratios[field.key]}
+                            onChange={(event) =>
+                              setRatios((current) => ({
+                                ...current,
+                                [field.key]: Math.max(0, Math.min(100, Number(event.target.value) || 0)),
+                              }))
+                            }
+                            className="w-full rounded-xl border border-slate-200 bg-white px-2 py-2 text-center text-xs font-bold text-violet-700 outline-none focus:border-violet-400"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className={cn('text-xs font-bold', ratioSum === 100 ? 'text-emerald-600' : 'text-amber-600')}>
+                        Tổng: {ratioSum}%{ratioSum !== 100 ? ' — AI sẽ làm tròn theo tổng này' : ' — khớp 100%'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setRatios({ recognize: 25, understand: 30, apply: 30, applyHigh: 15 })}
+                        className="rounded-lg bg-white px-2 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"
+                      >
+                        Mặc định 25/30/30/15
+                      </button>
+                    </div>
+                    {totalQuestions > 0 ? (
+                      <p className="mt-1 text-xs font-medium text-slate-500">
+                        ≈ {Math.round((ratios.recognize / Math.max(1, ratioSum)) * totalQuestions)} NB ·{' '}
+                        {Math.round((ratios.understand / Math.max(1, ratioSum)) * totalQuestions)} TH ·{' '}
+                        {Math.round((ratios.apply / Math.max(1, ratioSum)) * totalQuestions)} VD ·{' '}
+                        {Math.round((ratios.applyHigh / Math.max(1, ratioSum)) * totalQuestions)} VD cao / {totalQuestions} câu
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="mt-3">
                     <select
                       value={difficulty}
                       onChange={(event) => setDifficulty(event.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-violet-400 focus:bg-white"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-violet-400"
                     >
                       {DIFFICULTIES.map((item) => (
                         <option key={item.value} value={item.value}>
@@ -270,42 +450,44 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
                       ))}
                     </select>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="mb-1 block text-xs font-bold text-slate-500">TN</label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={40}
-                        value={mcqCount}
-                        onChange={(event) => setMcqCount(Math.max(0, Number(event.target.value) || 0))}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-bold text-slate-700 outline-none focus:border-violet-400 focus:bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-bold text-slate-500">TLN</label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={15}
-                        value={shortCount}
-                        onChange={(event) => setShortCount(Math.max(0, Number(event.target.value) || 0))}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-bold text-sky-700 outline-none focus:border-sky-400 focus:bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-bold text-slate-500">TL</label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={8}
-                        value={essayCount}
-                        onChange={(event) => setEssayCount(Math.max(0, Number(event.target.value) || 0))}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-bold text-amber-700 outline-none focus:border-amber-400 focus:bg-white"
-                      />
-                    </div>
-                  </div>
+                )}
+              </div>
+
+              {/* Chế độ chỉ dùng tài liệu */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+                <div>
+                  <p className="text-xs font-bold text-emerald-800">Chỉ dùng kiến thức trong tài liệu</p>
+                  <p className="text-xs font-medium text-emerald-700">
+                    Bật: AI không bịa kiến thức ngoài tài liệu. Tắt: AI được bổ sung kiến thức chuẩn của môn.
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={useOnlyDocument}
+                  onClick={() => setUseOnlyDocument((current) => !current)}
+                  className={cn(
+                    'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition',
+                    useOnlyDocument
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                      : 'border-slate-200 bg-white text-slate-500',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'relative h-4 w-7 rounded-full transition',
+                      useOnlyDocument ? 'bg-emerald-500' : 'bg-slate-300',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'absolute top-0.5 size-3 rounded-full bg-white shadow-sm transition-all',
+                        useOnlyDocument ? 'left-3.5' : 'left-0.5',
+                      )}
+                    />
+                  </span>
+                  {useOnlyDocument ? 'Chỉ tài liệu' : 'Cho phép bổ sung'}
+                </button>
               </div>
 
               <div>
@@ -316,7 +498,7 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}
                   rows={2}
-                  placeholder="Ví dụ: tập trung vào chương pt bậc 2, tránh trùng các đề trong tài liệu, thêm 2 câu vận dụng cao..."
+                  placeholder="Ví dụ: tránh trùng các đề trong tài liệu, mỗi câu tự luận có 3 ý, chia 40% câu về chương cuối..."
                   className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-medium outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-500/20"
                 />
               </div>
@@ -325,6 +507,29 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
                 <div className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-700">
                   <CircleAlert className="mt-0.5 size-4 shrink-0" />
                   {error}
+                </div>
+              ) : null}
+
+              {/* Báo cáo tự kiểm tra sau khi AI soạn xong */}
+              {issues.length > 0 ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <p className="flex items-center gap-2 text-xs font-bold text-amber-900">
+                    <ScanText className="size-4" />
+                    Kết quả tự kiểm tra: {summarizeIssues(issues)}
+                  </p>
+                  <ul className="mt-1.5 max-h-40 space-y-1 overflow-y-auto">
+                    {issues.slice(0, 12).map((issue, index) => (
+                      <li key={index} className="text-xs font-medium text-amber-800">
+                        <span className={issue.severity === 'error' ? 'font-bold text-rose-600' : 'font-bold text-amber-600'}>
+                          [{issue.severity === 'error' ? 'LỖI' : 'CẢNH BÁO'}]
+                        </span>{' '}
+                        {issue.questionLabel}: {issue.message}
+                      </li>
+                    ))}
+                    {issues.length > 12 ? (
+                      <li className="text-xs font-bold text-amber-700">... và {issues.length - 12} vấn đề khác</li>
+                    ) : null}
+                  </ul>
                 </div>
               ) : null}
 
@@ -337,7 +542,7 @@ export function AiExamPanel({ documents, defaults, onApply }: AiExamPanelProps) 
                 {generating ? (
                   <>
                     <LoaderCircle className="size-5 animate-spin" />
-                    AI đang đọc tài liệu và soạn đề... (có thể mất 1-2 phút)
+                    {PHASES.find((item) => item.key === phase)?.label ?? 'Đang xử lý...'}
                   </>
                 ) : (
                   <>

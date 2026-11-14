@@ -24,6 +24,7 @@ create table if not exists submissions (
   correct_mcq_answers jsonb default '[]'::jsonb,
   mcq_images jsonb default '[]'::jsonb,
   short_answer_details jsonb default '[]'::jsonb,
+  extra_details jsonb default '[]'::jsonb,
   essay_details jsonb default '[]'::jsonb,
   mcq_explanation_enabled boolean default false,
   mcq_explanations jsonb default '[]'::jsonb,
@@ -36,6 +37,8 @@ create table if not exists submissions (
 alter table submissions add column if not exists time_spent_seconds integer default 0;
 alter table submissions add column if not exists mcq_images jsonb default '[]'::jsonb;
 alter table submissions add column if not exists short_answer_details jsonb default '[]'::jsonb;
+-- Kết quả tự chấm các câu hỏi mở rộng (TN nhiều đáp án, Đúng/Sai).
+alter table submissions add column if not exists extra_details jsonb default '[]'::jsonb;
 alter table submissions add column if not exists mcq_explanation_enabled boolean default false;
 alter table submissions add column if not exists mcq_explanations jsonb default '[]'::jsonb;
 alter table submissions add column if not exists essay_details jsonb default '[]'::jsonb;
@@ -122,6 +125,9 @@ create policy "Allow all access" on documents
 
 -- Cột mcq_questions (jsonb) chụp nội dung câu trắc nghiệm văn bản khi học sinh nộp bài.
 alter table submissions add column if not exists mcq_questions jsonb default '[]'::jsonb;
+
+-- Kết quả tự chấm các câu hỏi mở rộng (TN nhiều đáp án, Đúng/Sai).
+alter table submissions add column if not exists extra_details jsonb default '[]'::jsonb;
 
 -- =====================================================================
 -- XONG. Sau khi chạy, tải lại trang web và tạo đề mới để kiểm tra.

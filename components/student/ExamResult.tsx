@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Submission } from '@/lib/types';
-import { OPTION_LABELS } from '@/lib/types';
+import { EXTRA_KIND_LABELS, OPTION_LABELS } from '@/lib/types';
 import { cn, formatNumber, isPending, progressPercent } from '@/lib/utils';
 
 type ExamResultProps = {
@@ -27,11 +27,18 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
   const pending = isPending(submission.status);
   const shortAnswerDetails = submission.shortAnswerDetails || [];
   const shortAnswerScore = shortAnswerDetails.reduce((sum, detail) => sum + detail.score, 0);
-  const mcqScore = Math.max(0, Number((submission.autoScore - shortAnswerScore).toFixed(1)));
+  // Câu hỏi mở rộng (TN nhiều đáp án, Đúng/Sai) đã nằm trong autoScore.
+  const extraDetails = submission.extraDetails || [];
+  const extraScore = extraDetails.reduce((sum, detail) => sum + detail.score, 0);
+  const mcqScore = Math.max(
+    0,
+    Number((submission.autoScore - shortAnswerScore - extraScore).toFixed(1)),
+  );
   const essayScore = Math.max(0, Number((submission.score - submission.autoScore).toFixed(1)));
   const correctPercent = progressPercent(submission.mcqCorrectCount, submission.mcqCount);
   const explanationEnabled = submission.mcqExplanationEnabled === true;
   const getExplanation = (index: number) => submission.mcqExplanations?.[index];
+  const hasExtras = extraDetails.length > 0;
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans">
@@ -86,9 +93,10 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <div className={cn('mt-6 grid grid-cols-2 gap-3', hasExtras ? 'sm:grid-cols-6' : 'sm:grid-cols-5')}>
             {[
               { label: 'Trắc nghiệm', value: `${formatNumber(mcqScore)}đ` },
+              ...(hasExtras ? [{ label: 'Mở rộng', value: `${formatNumber(extraScore)}đ` }] : []),
               { label: 'TL ngắn', value: `${formatNumber(shortAnswerScore)}đ` },
               { label: 'Tự luận', value: `${formatNumber(essayScore)}đ` },
               { label: 'Câu đúng TN', value: `${submission.mcqCorrectCount}/${submission.mcqCount}` },
@@ -224,6 +232,89 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
             <p className="mt-4 text-xs font-medium text-slate-500">Bài thi không có phần trắc nghiệm.</p>
           )}
         </section>
+
+        {hasExtras ? (
+          <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2">
+                <span className="flex size-8 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+                  <Award className="size-4" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">Phần trắc nghiệm mở rộng</h2>
+                  <p className="text-xs font-medium text-slate-500">
+                    TN nhiều đáp án và Đúng/Sai — hệ thống tự động chấm
+                  </p>
+                </div>
+              </div>
+              <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">
+                {formatNumber(extraScore)}đ
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {extraDetails.map((detail, index) => {
+                const correct = detail.correct;
+                return (
+                  <div
+                    key={`${detail.questionId}-${index}`}
+                    className={cn(
+                      'rounded-2xl border p-3',
+                      correct ? 'border-emerald-200 bg-emerald-50/50' : 'border-rose-200 bg-rose-50/50',
+                    )}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {correct ? (
+                          <CheckCircle2 className="size-4 text-emerald-600" />
+                        ) : (
+                          <CircleX className="size-4 text-rose-500" />
+                        )}
+                        <span className="text-xs font-bold text-slate-800">{detail.questionLabel}</span>
+                        <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[11px] font-bold text-white">
+                          {EXTRA_KIND_LABELS[detail.kind] ?? detail.kind}
+                        </span>
+                      </div>
+                      <span className={cn('text-xs font-bold', correct ? 'text-emerald-700' : 'text-rose-600')}>
+                        {formatNumber(detail.score)}/{formatNumber(detail.maxPoints)}đ
+                      </span>
+                    </div>
+
+                    {detail.questionContent ? (
+                      <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-slate-600">
+                        {detail.questionContent}
+                      </p>
+                    ) : null}
+
+                    <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                      <div className="rounded-xl bg-white/70 px-2.5 py-1.5 ring-1 ring-slate-100">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                          Bạn chọn
+                        </p>
+                        <p
+                          className={cn(
+                            'mt-0.5 text-xs font-bold',
+                            correct ? 'text-emerald-700' : 'text-rose-600',
+                          )}
+                        >
+                          {detail.studentAnswer || 'Bỏ trống'}
+                        </p>
+                      </div>
+                      {!correct ? (
+                        <div className="rounded-xl bg-white/70 px-2.5 py-1.5 ring-1 ring-slate-100">
+                          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Đáp án đúng
+                          </p>
+                          <p className="mt-0.5 text-xs font-bold text-emerald-700">{detail.correctAnswer}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
         {shortAnswerDetails.length > 0 ? (
           <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">

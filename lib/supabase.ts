@@ -258,6 +258,8 @@ export type SubmissionRow = {
   mcq_explanation_enabled?: boolean | null
   mcq_explanations?: unknown[] | null
   short_answer_details?: unknown[] | null
+  /** Câu hỏi mở rộng (TN nhiều đáp án, Đúng/Sai) — cột thêm sau, có thể chưa tồn tại trên schema cũ. */
+  extra_details?: unknown[] | null
   essay_details: unknown[] | null
   status: string
   submitted_at: string
@@ -282,6 +284,7 @@ export function mapSubmissionToRow(submission: Submission) {
     mcq_explanation_enabled: submission.mcqExplanationEnabled === true,
     mcq_explanations: submission.mcqExplanations ?? [],
     short_answer_details: submission.shortAnswerDetails,
+    extra_details: submission.extraDetails ?? [],
     essay_details: submission.essayDetails,
     status: submission.status,
     submitted_at: toIsoTimestamp(submission.submittedAt),
@@ -307,6 +310,7 @@ export function mapRowToSubmission(row: SubmissionRow): Submission {
     mcqExplanationEnabled: row.mcq_explanation_enabled === true,
     mcqExplanations: (row.mcq_explanations ?? []) as Submission['mcqExplanations'],
     shortAnswerDetails: (row.short_answer_details ?? []) as Submission['shortAnswerDetails'],
+    extraDetails: (row.extra_details ?? []) as Submission['extraDetails'],
     essayDetails: (row.essay_details ?? []) as Submission['essayDetails'],
     status: row.status,
     submittedAt: formatTimestamp(row.submitted_at),
@@ -359,9 +363,9 @@ export async function insertSubmissionToCloud(
 
   const row = mapSubmissionToRow(submission)
   let currentRow: Record<string, unknown> = { ...(row as Record<string, unknown>) }
-  // Bảng cũ có thể chưa có các cột mới (short_answer_details / mcq_explanation_*).
+  // Bảng cũ có thể chưa có các cột mới (short_answer_details / mcq_explanation_* / extra_details).
   // Thử bỏ dần từng cột bị thiếu trong thông báo lỗi cho tới khi insert thành công.
-  const optionalColumns = ['short_answer_details', 'mcq_questions', 'mcq_explanation_enabled', 'mcq_explanations'] as const
+  const optionalColumns = ['extra_details', 'short_answer_details', 'mcq_questions', 'mcq_explanation_enabled', 'mcq_explanations'] as const
   const first = await supabase.from('submissions').insert(currentRow)
   let error = first.error
   let guard = 0
@@ -409,7 +413,7 @@ export async function updateSubmissionInCloud(
     id: submission.id,
     ...(mapSubmissionToRow(submission) as Record<string, unknown>),
   }
-  const optionalColumns = ['short_answer_details', 'mcq_questions', 'mcq_explanation_enabled', 'mcq_explanations'] as const
+  const optionalColumns = ['extra_details', 'short_answer_details', 'mcq_questions', 'mcq_explanation_enabled', 'mcq_explanations'] as const
 
   const first = await supabase.from('submissions').upsert(currentRow, { onConflict: 'id' })
   let error = first.error

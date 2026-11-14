@@ -9,6 +9,7 @@ import {
   ImagePlus,
   Layers,
   Lightbulb,
+  LoaderCircle,
   Plus,
   Save,
   Sparkles,
@@ -19,19 +20,30 @@ import type {
   EssayQuestion,
   Exam,
   ExamType,
+  ExtraQuestion,
   Grade,
   McqExplanation,
   McqQuestion,
+  ShortAnswerKind,
   ShortAnswerQuestion,
   SubPart,
   TeacherDocument,
 } from '@/lib/types';
-import { GRADES, OPTION_LABELS, SUBJECTS } from '@/lib/types';
+import { GRADES, OPTION_LABELS, SHORT_KIND_LABELS, SUBJECTS } from '@/lib/types';
 import { cn, formatNumber } from '@/lib/utils';
 import { imageFilesFromClipboard, optimizeImage } from '@/lib/image';
 import { useToast } from '@/components/ui/FeedbackProvider';
 import { AiExamPanel } from '@/components/teacher/AiExamPanel';
-import type { AiExamDraft } from '@/lib/ai';
+import { ExtraQuestionsEditor } from '@/components/teacher/ExtraQuestionsEditor';
+import {
+  aiPayloadFromDocument,
+  aiRegenerateQuestion,
+  type AiCalculationDraft,
+  type AiExamDraft,
+  type AiFillBlankDraft,
+  type AiShortDraft,
+} from '@/lib/ai';
+import { normalizeExtraQuestion } from '@/lib/storage';
 
 type CreateExamTabProps = {
   onCreate: (exam: Exam) => boolean | Promise<boolean>;
@@ -120,7 +132,10 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
   const [saving, setSaving] = useState(false);
 
   const [shortAnswerQuestions, setShortAnswerQuestions] = useState<ShortAnswerQuestion[]>([]);
+  const [extraQuestions, setExtraQuestions] = useState<ExtraQuestion[]>([]);
   const [essayQuestions, setEssayQuestions] = useState<EssayQuestion[]>([createEmptyEssay(7)]);
+  /** Id câu đang được AI tạo lại (nếu có). */
+  const [regeneratingId, setRegeneratingId] = useState<string | number | null>(null);
 
   const effectiveMcqCount = hasMcq ? mcqCount : 0;
   const mcqPoints = useMemo(
@@ -131,11 +146,15 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
     () => shortAnswerQuestions.reduce((sum, question) => sum + question.points, 0),
     [shortAnswerQuestions],
   );
+  const extraPoints = useMemo(
+    () => extraQuestions.reduce((sum, question) => sum + question.points, 0),
+    [extraQuestions],
+  );
   const essayPoints = useMemo(
     () => essayQuestions.reduce((sum, question) => sum + question.points, 0),
     [essayQuestions],
   );
-  const configuredPoints = Number((mcqPoints + shortAnswerPoints + essayPoints).toFixed(2));
+  const configuredPoints = Number((mcqPoints + shortAnswerPoints + extraPoints + essayPoints).toFixed(2));
   const pointsMismatch = Math.abs(configuredPoints - totalPoints) > 0.01;
 
   const updateMcqCount = (value: number) => {
@@ -181,13 +200,19 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
     return Number.isFinite(parsed) ? parsed : fallback;
   };
 
-  /** Điền cả form bằng đề nháp AI vừa sinh. */
+  /** Điền cả form bằng đề nháp AI vừa sinh (7 dạng câu hỏi). */
   const applyAiDraft = (draft: AiExamDraft) => {
     const aiMcq = Array.isArray(draft?.mcq) ? draft.mcq : [];
+    const aiMulti = Array.isArray(draft?.multiMcq) ? draft.multiMcq : [];
+    const aiTrueFalse = Array.isArray(draft?.trueFalse) ? draft.trueFalse : [];
+    const aiFill = Array.isArray(draft?.fillBlanks) ? draft.fillBlanks : [];
+    const aiCalc = Array.isArray(draft?.calculations) ? draft.calculations : [];
     const aiShort = Array.isArray(draft?.shortAnswers) ? draft.shortAnswers : [];
     const aiEssay = Array.isArray(draft?.essays) ? draft.essays : [];
 
-    if (aiMcq.length + aiShort.length + aiEssay.length === 0) {
+    const aiTotalQuestions =
+      aiMcq.length + aiMulti.length + aiTrueFalse.length + aiFill.length + aiCalc.length + aiShort.length + aiEssay.length;
+    if (aiTotalQuestions === 0) {
       toast.error('AI không trả về câu hỏi nào', 'Thử đổi tài liệu khác hoặc gửi lại yêu cầu.');
       return;
     }
@@ -203,7 +228,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
     const aiTotal = aiNumber(draft.totalPoints, totalPoints);
     const nextTotal = Number.isFinite(aiTotal) && aiTotal > 0 ? aiTotal : totalPoints;
 
-    // Trắc nghiệm
+    // Trắc nghiệm 1 đáp án
     const nextHasMcq = aiMcq.length > 0;
     const nextMcqCount = nextHasMcq ? Math.min(60, aiMcq.length) : effectiveMcqCount;
     const nextMcqQuestions: (McqQuestion | null)[] = [];
@@ -223,19 +248,81 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
       nextMcqExplanations.push({ text: explanationText, images: [] });
     });
 
-    // Trả lời ngắn — đánh số tiếp sau trắc nghiệm
-    const nextShort: ShortAnswerQuestion[] = aiShort.map((item, index) => {
-      const points = Math.max(0, aiNumber(item?.points, 1));
-      return {
-        id: newId('short'),
+    // Câu hỏi mở rộng: TN nhiều đáp án + Đúng/Sai — đánh số tiếp sau trắc nghiệm
+    const nextExtra: ExtraQuestion[] = [];
+    aiMulti.forEach((item, index) => {
+      const options = Array.isArray(item?.options)
+        ? item.options.slice(0, 4).map((option) => String(option ?? '').trim())
+        : [];
+      while (options.length < 4) options.push('');
+      const correctIndexes = Array.isArray(item?.correctIndexes)
+        ? [...new Set(item.correctIndexes.map((value) => Math.min(3, Math.max(0, Math.round(aiNumber(value, 0))))))]
+        : [];
+      const explanationText = String(item?.explanation ?? '').trim();
+      if (explanationText) hasExplanationText = true;
+      nextExtra.push({
+        id: newId('extra'),
+        kind: 'multi-mcq',
         questionLabel: `Câu ${nextMcqCount + index + 1}`,
-        points,
-        questionImage: '',
+        points: Math.max(0.25, aiNumber(item?.points, 0.5)),
         content: String(item?.content ?? '').trim(),
-        answer: String(item?.answer ?? '').trim(),
+        options,
+        correctIndexes,
+        explanation: { text: explanationText, images: [] },
+      });
+    });
+    aiTrueFalse.forEach((item) => {
+      const statements = Array.isArray(item?.statements)
+        ? item.statements.slice(0, 4).map((statement, statementIndex) => ({
+            text: String(statement?.text ?? '').trim(),
+            answer: statement?.answer === true || statement?.answer === 'true' || statementIndex % 2 === 0,
+          }))
+        : [];
+      const explanationText = String(item?.explanation ?? '').trim();
+      if (explanationText) hasExplanationText = true;
+      nextExtra.push({
+        id: newId('extra'),
+        kind: 'true-false',
+        questionLabel: `Câu ${nextMcqCount + nextExtra.length + 1}`,
+        points: Math.max(0.5, aiNumber(item?.points, 1)),
+        content: String(item?.content ?? '').trim(),
+        statements,
+        explanation: { text: explanationText, images: [] },
+      });
+    });
+
+    // Trả lời ngắn + điền khuyết + tính toán — đánh số tiếp sau câu hỏi mở rộng
+    const nextShort: ShortAnswerQuestion[] = [];
+    // Hợp nhất 3 loại draft để xử lý chung; điền khuyết lấy đáp án từ từng chỗ trống.
+    type ShortDraftItem = Partial<AiFillBlankDraft & AiCalculationDraft & AiShortDraft>;
+    const fillAndShort: Array<{ item: ShortDraftItem; kind: ShortAnswerKind }> = [
+      ...aiFill.map((item) => ({ item: { ...item }, kind: 'fill-blank' as const })),
+      ...aiCalc.map((item) => ({ item: { ...item }, kind: 'calculation' as const })),
+      ...aiShort.map((item) => ({ item: { ...item }, kind: 'text' as const })),
+    ];
+    fillAndShort.forEach(({ item, kind }, index) => {
+      const content = String(item?.content ?? '').trim();
+      let answer = String(item?.answer ?? '').trim();
+      if (kind === 'fill-blank') {
+        // Ghép đáp án từng chỗ trống theo thứ tự, cách nhau bởi | để chấm tự động.
+        const blanks = Array.isArray(item?.blanks)
+          ? item.blanks.map((blank) => String(blank?.answer ?? '').trim()).filter(Boolean)
+          : [];
+        if (blanks.length > 0) answer = blanks.join(' | ');
+      }
+      const explanationText = String(item?.explanation ?? '').trim();
+      if (explanationText) hasExplanationText = true;
+      nextShort.push({
+        id: newId('short'),
+        questionLabel: `Câu ${nextMcqCount + nextExtra.length + index + 1}`,
+        points: Math.max(0.25, aiNumber(item?.points, 1)),
+        questionImage: '',
+        content,
+        answer,
         rubric: '',
-        explanation: { text: String(item?.explanation ?? '').trim(), images: [] },
-      };
+        kind,
+        explanation: { text: explanationText, images: [] },
+      });
     });
 
     // Tự luận — đánh số tiếp sau trả lời ngắn
@@ -250,7 +337,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
       const total = Number(subParts.reduce((sum, part) => sum + part.points, 0).toFixed(2));
       return {
         id: newId(),
-        questionLabel: `Câu ${nextMcqCount + nextShort.length + index + 1}`,
+        questionLabel: `Câu ${nextMcqCount + nextExtra.length + nextShort.length + index + 1}`,
         points: total > 0 ? total : Math.max(0, aiNumber(item?.points, 2)),
         questionImage: '',
         subParts,
@@ -259,9 +346,10 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
     });
 
     // Điểm mỗi câu TN = phần điểm còn lại của thang điểm
+    const nextExtraPoints = nextExtra.reduce((sum, question) => sum + question.points, 0);
     const shortPoints = nextShort.reduce((sum, question) => sum + question.points, 0);
-    const essayPoints = nextEssay.reduce((sum, question) => sum + question.points, 0);
-    const remaining = nextTotal - shortPoints - essayPoints;
+    const essayPointsTotal = nextEssay.reduce((sum, question) => sum + question.points, 0);
+    const remaining = nextTotal - shortPoints - essayPointsTotal - nextExtraPoints;
     const nextMcqPointPerQ =
       nextMcqCount > 0 && remaining > 0
         ? Math.round((remaining / nextMcqCount) * 100) / 100
@@ -279,6 +367,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
     setMcqQuestions(nextMcqQuestions);
     setMcqExplanations(nextMcqExplanations);
     setMcqExplanationEnabled(hasExplanationText);
+    setExtraQuestions(nextExtra);
     setShortAnswerQuestions(nextShort);
     setEssayQuestions(nextEssay);
     setOpenTextQuestion(null);
@@ -287,6 +376,150 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  };
+
+  /** Gom payload tài liệu gửi cho AI (giới hạn 3 tài liệu nhị phân đầu). */
+  const buildAiPayload = () => {
+    let binaryBudget = 3;
+    return documents.map((document) => {
+      const item = aiPayloadFromDocument(document);
+      if (item.imageData || item.pdfData) {
+        if (binaryBudget <= 0) return { ...item, imageData: undefined, pdfData: undefined };
+        binaryBudget -= 1;
+      }
+      return item;
+    });
+  };
+
+  /** Danh sách nội dung các câu khác để AI tránh trùng khi tạo lại một câu. */
+  const buildExcludeList = (kind: string, targetId: string | number): string[] => {
+    const exclude: string[] = [];
+    mcqQuestions.forEach((question, index) => {
+      if (question && !(kind === 'mcq' && Number(targetId) === index)) exclude.push(question.content);
+    });
+    shortAnswerQuestions.forEach((question) => {
+      if (!(kind !== 'mcq' && String(question.id) === String(targetId))) exclude.push(question.content);
+    });
+    extraQuestions.forEach((question) => {
+      if (!(kind !== 'mcq' && String(question.id) === String(targetId))) exclude.push(question.content);
+    });
+    essayQuestions.forEach((question) => {
+      if (!(kind === 'essay' && String(question.id) === String(targetId))) {
+        question.subParts.forEach((part) => exclude.push(part.content));
+      }
+    });
+    return exclude.filter((item) => item.trim());
+  };
+
+  /** Yêu cầu AI tạo lại MỘT câu hỏi — không ảnh hưởng các câu còn lại. */
+  const regenerateQuestion = async (
+    kind: 'mcq' | 'multi-mcq' | 'true-false' | 'fill-blank' | 'short' | 'calculation' | 'essay',
+    targetId: string | number,
+  ) => {
+    if (regeneratingId) return;
+    setRegeneratingId(targetId);
+    try {
+      const { question } = await aiRegenerateQuestion({
+        documents: buildAiPayload(),
+        kind,
+        subject,
+        grade,
+        instruction: '',
+        exclude: buildExcludeList(kind, targetId),
+      });
+      applyRegeneratedQuestion(kind, targetId, question);
+      toast.success('Đã tạo lại câu hỏi', 'AI đã viết câu mới — kiểm tra lại đáp án nhé.');
+    } catch (error) {
+      toast.error('AI gặp sự cố', error instanceof Error ? error.message : 'Vui lòng thử lại.');
+    } finally {
+      setRegeneratingId(null);
+    }
+  };
+
+  /** Gán câu hỏi AI vừa tạo lại vào đúng vị trí cũ trên form. */
+  const applyRegeneratedQuestion = (
+    kind: 'mcq' | 'multi-mcq' | 'true-false' | 'fill-blank' | 'short' | 'calculation' | 'essay',
+    targetId: string | number,
+    question: Record<string, unknown>,
+  ) => {
+    const content = String(question?.content ?? '').trim();
+    const explanationText = String(question?.explanation ?? '').trim();
+    const points = Math.max(0, aiNumber(question?.points, 1));
+
+    if (kind === 'mcq' && typeof targetId === 'number') {
+      const options = Array.isArray(question?.options)
+        ? question.options.slice(0, 4).map((option) => String(option ?? '').trim())
+        : [];
+      while (options.length < 4) options.push('');
+      updateMcqQuestion(targetId, { content, options });
+      setMcqAnswers((current) => {
+        const next = [...current];
+        next[targetId] = Math.min(3, Math.max(0, Math.round(aiNumber(question?.correctIndex, 0))));
+        return next;
+      });
+      setMcqExplanations((current) =>
+        current.map((item, index) => (index === targetId ? { text: explanationText, images: [] } : item)),
+      );
+      return;
+    }
+
+    if (kind === 'multi-mcq' || kind === 'true-false') {
+      // Tạo lại câu hỏi mở rộng: giữ nguyên kind/label, chỉ thay nội dung AI trả về.
+      setExtraQuestions((current) =>
+        current.map((item) => {
+          if (String(item.id) !== String(targetId)) return item;
+          return normalizeExtraQuestion(
+            {
+              ...item,
+              content,
+              points,
+              options: Array.isArray(question?.options)
+                ? question.options.slice(0, 4).map((option) => String(option ?? '').trim())
+                : undefined,
+              correctIndexes: Array.isArray(question?.correctIndexes)
+                ? question.correctIndexes.map((value) => Math.min(3, Math.max(0, Math.round(aiNumber(value, 0)))))
+                : undefined,
+              statements: Array.isArray(question?.statements)
+                ? question.statements.slice(0, 4).map((statement) => ({
+                    text: String(statement?.text ?? '').trim(),
+                    answer: statement?.answer === true || statement?.answer === 'true',
+                  }))
+                : undefined,
+              explanation: { text: explanationText, images: [] },
+            },
+            0,
+          );
+        }),
+      );
+      return;
+    }
+
+    if (kind === 'essay') {
+      // EssayQuestion không có cột content — nội dung nằm trong subParts.
+      updateEssay(targetId, {
+        points,
+        rubric: String(question?.rubric ?? '').trim(),
+        subParts: Array.isArray(question?.subParts)
+          ? question.subParts.slice(0, 8).map((part, index) => ({
+              label: String(part?.label ?? '') || String.fromCharCode(97 + index),
+              content: String(part?.content ?? '').trim(),
+              points: Math.max(0, aiNumber(part?.points, 1)),
+            }))
+          : [{ label: 'a', content, points }],
+      });
+      return;
+    }
+
+    // short / fill-blank / calculation
+    let answer = String(question?.answer ?? '').trim();
+    if (kind === 'fill-blank') {
+      const blanks = Array.isArray(question?.blanks)
+        ? question.blanks.map((blank) => String(blank?.answer ?? '').trim()).filter(Boolean)
+        : [];
+      if (blanks.length > 0) answer = blanks.join(' | ');
+    }
+    updateShortAnswer(targetId, { content, answer, points });
+    updateShortExplanation(targetId, { text: explanationText, images: [] });
   };
 
   const addMcqFiles = async (files: File[]) => {
@@ -565,6 +798,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
     setOpenTextQuestion(null);
     setOpenExplanation(null);
     setShortAnswerQuestions([]);
+    setExtraQuestions([]);
     setEssayQuestions([createEmptyEssay(7)]);
   };
 
@@ -583,8 +817,8 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
       return;
     }
 
-    if (effectiveMcqCount + shortAnswerQuestions.length + essayQuestions.length === 0) {
-      toast.error('Đề chưa có câu hỏi', 'Hãy thêm ít nhất một câu trắc nghiệm, trả lời ngắn hoặc tự luận.');
+    if (effectiveMcqCount + shortAnswerQuestions.length + extraQuestions.length + essayQuestions.length === 0) {
+      toast.error('Đề chưa có câu hỏi', 'Hãy thêm ít nhất một câu hỏi vào đề trước khi công bố.');
       return;
     }
 
@@ -593,6 +827,30 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
       toast.error(
         'Thiếu đáp án câu trả lời ngắn',
         `Vui lòng nhập đáp án đúng cho ${missingAnswer.questionLabel.trim() || 'câu trả lời ngắn'}.`,
+      );
+      return;
+    }
+
+    // Kiểm tra câu hỏi mở rộng có đủ đáp án đúng không.
+    const badMulti = extraQuestions.find(
+      (question) => question.kind === 'multi-mcq' && (question.correctIndexes ?? []).length === 0,
+    );
+    if (badMulti) {
+      toast.error(
+        'Thiếu đáp án câu trắc nghiệm nhiều đáp án',
+        `Vui lòng chọn ít nhất một phương án đúng cho ${badMulti.questionLabel.trim() || 'câu hỏi'}.`,
+      );
+      return;
+    }
+    const badTrueFalse = extraQuestions.find(
+      (question) =>
+        question.kind === 'true-false' &&
+        (question.statements ?? []).length < 2,
+    );
+    if (badTrueFalse) {
+      toast.error(
+        'Câu Đúng/Sai chưa có ý nhận định',
+        `${badTrueFalse.questionLabel.trim() || 'Câu hỏi'} cần ít nhất 2 ý nhận định.`,
       );
       return;
     }
@@ -618,6 +876,18 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
             images: item.images,
           }))
         : [],
+      extraQuestions: extraQuestions.map((question) => ({
+        ...question,
+        questionLabel: question.questionLabel.trim() || 'Câu hỏi',
+        points: Number(question.points) || 0,
+        content: (question.content || '').trim(),
+        options: question.options?.map((option) => option.trim()) ?? undefined,
+        correctIndexes: question.correctIndexes ?? undefined,
+        statements: question.statements?.map((statement) => ({ ...statement })) ?? undefined,
+        explanation: question.explanation
+          ? { text: (question.explanation.text || '').trim(), images: question.explanation.images }
+          : undefined,
+      })),
       shortAnswerQuestions: shortAnswerQuestions.map((question) => ({
         ...question,
         questionLabel: question.questionLabel.trim() || 'Câu trả lời ngắn',
@@ -823,8 +1093,8 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
               {pointsMismatch ? ` (lệch ${formatNumber(Math.abs(configuredPoints - totalPoints), 2)}đ so với thang điểm)` : ' — khớp với thang điểm'}
             </span>
             <span className="font-bold">
-              TN {formatNumber(mcqPoints, 2)}đ · TLN {formatNumber(shortAnswerPoints, 2)}đ · TL{' '}
-              {formatNumber(essayPoints, 2)}đ
+              TN {formatNumber(mcqPoints, 2)}đ · Mở rộng {formatNumber(extraPoints, 2)}đ · TLN{' '}
+              {formatNumber(shortAnswerPoints, 2)}đ · TL {formatNumber(essayPoints, 2)}đ
             </span>
           </div>
         </section>
@@ -961,6 +1231,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                     key={`${image.slice(-24)}-${index}`}
                     className="group relative flex h-36 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-1"
                   >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={image} alt={`Trang đề ${index + 1}`} className="max-h-full max-w-full rounded-lg object-contain" />
                     <span className="absolute bottom-1 left-1 rounded-md bg-slate-950/70 px-1.5 py-0.5 text-xs font-bold text-white">
                       Trang {index + 1}
@@ -1303,10 +1574,34 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
           )}
         </section>
 
-        {/* STEP 3 */}
+        {/* Câu hỏi dạng mở rộng: TN nhiều đáp án + Đúng/Sai */}
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
           <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
             <NumberBadge>3</NumberBadge>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Câu hỏi trắc nghiệm nhiều đáp án &amp; Đúng/Sai</h2>
+              <p className="text-xs font-medium text-slate-500">
+                Chấm tự động — TN nhiều đáp án phải chọn đúng toàn bộ, Đúng/Sai có điểm từng ý
+              </p>
+            </div>
+          </div>
+
+          <ExtraQuestionsEditor
+            questions={extraQuestions}
+            numberingStart={effectiveMcqCount + 1}
+            regeneratingId={regeneratingId}
+            onRegenerate={(id) => {
+              const target = extraQuestions.find((question) => String(question.id) === String(id));
+              void regenerateQuestion(target?.kind === 'true-false' ? 'true-false' : 'multi-mcq', id);
+            }}
+            onChange={setExtraQuestions}
+          />
+        </section>
+
+        {/* STEP 4 */}
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
+          <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
+            <NumberBadge>4</NumberBadge>
             <div>
               <h2 className="text-sm font-bold text-slate-900">Phần trả lời ngắn</h2>
               <p className="text-xs font-medium text-slate-500">
@@ -1346,6 +1641,11 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                       placeholder="Câu 1"
                       className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-sky-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
                     />
+                    {(question.kind ?? 'text') !== 'text' ? (
+                      <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-bold text-cyan-700 ring-1 ring-cyan-600/10">
+                        {SHORT_KIND_LABELS[question.kind ?? 'text']}
+                      </span>
+                    ) : null}
                     <span className="text-xs font-bold text-slate-500">Điểm câu:</span>
                     <input
                       type="number"
@@ -1358,17 +1658,42 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                       className="w-20 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-center text-xs font-bold text-sky-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShortAnswerQuestions((current) =>
-                        current.filter((item) => item.id !== question.id),
-                      )
-                    }
-                    className="inline-flex items-center gap-1 self-start rounded-xl px-2.5 py-1.5 text-xs font-bold text-rose-500 transition hover:bg-rose-100 sm:self-auto"
-                  >
-                    <Trash2 className="size-3.5" /> Xóa câu
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void regenerateQuestion(
+                          question.kind === 'fill-blank'
+                            ? 'fill-blank'
+                            : question.kind === 'calculation'
+                              ? 'calculation'
+                              : 'short',
+                          question.id,
+                        )
+                      }
+                      disabled={regeneratingId !== null}
+                      title="Yêu cầu AI tạo lại câu này"
+                      className="inline-flex items-center gap-1 rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:opacity-60"
+                    >
+                      {regeneratingId === question.id ? (
+                        <LoaderCircle className="size-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="size-3.5" />
+                      )}
+                      Tạo lại
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShortAnswerQuestions((current) =>
+                          current.filter((item) => item.id !== question.id),
+                        )
+                      }
+                      className="inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-bold text-rose-500 transition hover:bg-rose-100"
+                    >
+                      <Trash2 className="size-3.5" /> Xóa câu
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
@@ -1391,6 +1716,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                     />
                     {question.questionImage ? (
                       <div className="relative flex h-32 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-1">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={question.questionImage}
                           alt="Ảnh đề"
@@ -1553,10 +1879,10 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
           </div>
         </section>
 
-        {/* STEP 4 */}
+        {/* STEP 5 */}
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7">
           <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
-            <NumberBadge>4</NumberBadge>
+            <NumberBadge>5</NumberBadge>
             <div>
               <h2 className="text-sm font-bold text-slate-900">Phần tự luận</h2>
               <p className="text-xs font-medium text-slate-500">Chia câu hỏi thành các ý a, b, c... và đặt điểm tương ứng</p>
@@ -1596,13 +1922,29 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                         className="w-20 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-center text-xs font-bold text-emerald-700 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setEssayQuestions((current) => current.filter((item) => item.id !== question.id))}
-                      className="inline-flex items-center gap-1 self-start rounded-xl px-2.5 py-1.5 text-xs font-bold text-rose-500 transition hover:bg-rose-100 sm:self-auto"
-                    >
-                      <Trash2 className="size-3.5" /> Xóa câu
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void regenerateQuestion('essay', question.id)}
+                        disabled={regeneratingId !== null}
+                        title="Yêu cầu AI tạo lại câu này"
+                        className="inline-flex items-center gap-1 self-start rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:opacity-60 sm:self-auto"
+                      >
+                        {regeneratingId === question.id ? (
+                          <LoaderCircle className="size-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="size-3.5" />
+                        )}
+                        Tạo lại
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEssayQuestions((current) => current.filter((item) => item.id !== question.id))}
+                        className="inline-flex items-center gap-1 self-start rounded-xl px-2.5 py-1.5 text-xs font-bold text-rose-500 transition hover:bg-rose-100 sm:self-auto"
+                      >
+                        <Trash2 className="size-3.5" /> Xóa câu
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
@@ -1625,6 +1967,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                       />
                       {question.questionImage ? (
                         <div className="relative flex h-32 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-1">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={question.questionImage} alt="Ảnh đề" className="max-h-full max-w-full rounded-lg object-contain" />
                           <button
                             type="button"

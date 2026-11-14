@@ -8,15 +8,24 @@ import {
   FileText,
   FileUp,
   LoaderCircle,
+  ScanText,
   Send,
   Sparkles,
+  Table2,
   Trash2,
+  TriangleAlert,
   X,
 } from 'lucide-react';
 import type { TeacherDocument } from '@/lib/types';
 import { cn, formatNumber } from '@/lib/utils';
-import { extractDocumentContent, FILE_KIND_LABELS, formatFileSize } from '@/lib/documents';
 import {
+  extractDocumentContent,
+  FILE_KIND_LABELS,
+  formatFileSize,
+  parseDocumentContent,
+} from '@/lib/documents';
+import {
+  aiOcrDocument,
   aiPayloadFromDocument,
   aiReadiness,
   aiSummarizeDocument,
@@ -35,9 +44,16 @@ type DocumentsTabProps = {
 const KIND_BADGES: Record<TeacherDocument['fileType'], string> = {
   pdf: 'bg-rose-50 text-rose-700 ring-rose-600/10',
   docx: 'bg-sky-50 text-sky-700 ring-sky-600/10',
+  pptx: 'bg-orange-50 text-orange-700 ring-orange-600/10',
   text: 'bg-slate-100 text-slate-700 ring-slate-600/10',
   image: 'bg-amber-50 text-amber-700 ring-amber-600/10',
 };
+
+/** Tài liệu cần OCR: là ảnh hoặc PDF scan (không có chữ trích xuất được). */
+function needsOcr(document: TeacherDocument): boolean {
+  if (document.fileType === 'image') return true;
+  return document.fileType === 'pdf' && !document.content.trim() && Boolean(document.pdfData);
+}
 
 export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps) {
   const toast = useToast();
@@ -47,7 +63,9 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [openDocId, setOpenDocId] = useState<string | null>(null);
+  const [openPageByDoc, setOpenPageByDoc] = useState<Record<string, number>>({});
   const [summarizingId, setSummarizingId] = useState<string | null>(null);
+  const [ocrRunningId, setOcrRunningId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
@@ -79,6 +97,47 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
     void saveDocumentToCloud(updated);
   };
 
+  /** Nhận diện chữ bằng AI (OCR) cho tài liệu scan/ảnh — teacher duyệt lại sau đó. */
+  const runOcr = async (target: TeacherDocument, silent = false): Promise<boolean> => {
+    if (!target.imageData && !target.pdfData) return false;
+    setOcrRunningId(target.id);
+    try {
+      const { text } = await aiOcrDocument(aiPayloadFromDocument(target));
+      const analyzed = parseDocumentContent(text);
+      if (!text.trim()) {
+        updateDocument({
+          ...target,
+          ocrStatus: 'failed',
+          ocrError: 'AI không đọc được nội dung nào trong tài liệu.',
+        });
+        if (!silent) toast.error('OCR không có kết quả', 'Tài liệu quá mờ hoặc sai định dạng ảnh.');
+        return false;
+      }
+      updateDocument({
+        ...target,
+        content: text,
+        pageCount: target.pageCount ?? (analyzed.pages.length || undefined) ?? 1,
+        pages: analyzed.pages.length > 0 ? analyzed.pages : target.pages,
+        detected: analyzed.detected,
+        warnings: analyzed.warnings,
+        ocrStatus: 'done',
+        ocrError: undefined,
+      });
+      if (!silent) toast.success('Đã nhận diện chữ xong', `Kiểm tra lại nội dung của "${target.title}".`);
+      return true;
+    } catch (error) {
+      updateDocument({
+        ...target,
+        ocrStatus: 'failed',
+        ocrError: error instanceof Error ? error.message : 'Không nhận diện được chữ.',
+      });
+      if (!silent) toast.error('OCR gặp sự cố', error instanceof Error ? error.message : 'Vui lòng thử lại.');
+      return false;
+    } finally {
+      setOcrRunningId(null);
+    }
+  };
+
   const addFiles = async (files: File[]) => {
     if (files.length === 0) return;
     setUploading(true);
@@ -99,6 +158,10 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
             content: extracted.content,
             imageData: extracted.imageData,
             pdfData: extracted.pdfData,
+            pageCount: extracted.pageCount,
+            pages: extracted.pages,
+            detected: extracted.detected,
+            warnings: extracted.warnings,
             createdAt: new Date().toISOString(),
           };
           created.push(document);
@@ -113,13 +176,23 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
 
       if (created.length > 0) {
         onDocumentsChange([...created, ...documents]);
+        const ocrTargets = created.filter(needsOcr);
         const emptyText = created.filter((document) => !document.content.trim()).length;
         toast.success(
           'Đã tải lên ' + created.length + ' tài liệu',
-          emptyText > 0
-            ? `${emptyText} tệp không có chữ (ảnh/PDF scan) — AI sẽ đọc trực tiếp nội dung ảnh khi soạn đề.`
-            : 'Nội dung đã sẵn sàng cho AI đọc và soạn đề.',
+          ocrTargets.length > 0 && aiConfigured === true && keyValid !== false
+            ? `${ocrTargets.length} tài liệu scan/ảnh — đang nhận diện chữ bằng AI...`
+            : emptyText > 0
+              ? `${emptyText} tệp không có chữ (ảnh/PDF scan) — dùng "Nhận diện chữ bằng AI" để đọc nội dung.`
+              : 'Nội dung đã sẵn sàng cho AI đọc và soạn đề.',
         );
+
+        // Tự động OCR các tài liệu scan/ảnh (lần lượt từng tệp để không quá tải API).
+        if (aiConfigured === true && keyValid !== false) {
+          for (const target of ocrTargets) {
+            await runOcr(target, true);
+          }
+        }
       }
     } finally {
       setUploading(false);
@@ -200,7 +273,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Tài liệu học tập</h1>
             <p className="text-sm text-slate-500">
-              Tải tài liệu lên — AI đọc và dùng chúng để soạn đề kiểm tra trong tab “Tạo đề kiểm tra”.
+              Tải tài liệu lên — AI đọc, OCR tài liệu scan và dùng chúng để soạn đề kiểm tra.
             </p>
           </div>
         </div>
@@ -247,7 +320,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
             type="file"
             className="hidden"
             multiple
-            accept=".pdf,.docx,.txt,.md,image/*"
+            accept=".pdf,.docx,.pptx,.txt,.md,image/*"
             onChange={(event) => {
               void addFiles(Array.from(event.target.files || []));
               event.target.value = '';
@@ -260,7 +333,7 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
             {uploading ? 'Đang đọc tài liệu...' : 'Kéo thả hoặc chọn tệp tài liệu'}
           </p>
           <p className="mt-1 text-xs font-medium text-slate-500">
-            PDF · Word (.docx) · TXT/MD · Ảnh chụp đề hoặc bài giảng — AI đọc được cả ảnh scan
+            PDF · Word (.docx) · PowerPoint (.pptx) · TXT/MD · Ảnh — AI đọc được cả ảnh scan, giữ đúng thứ tự từng trang
           </p>
         </div>
       </section>
@@ -288,6 +361,18 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
           <div className="space-y-3">
             {documents.map((document) => {
               const open = openDocId === document.id;
+              const analyzed = document.pages?.length
+                ? { pages: document.pages, detected: document.detected, warnings: document.warnings ?? [] }
+                : parseDocumentContent(document.content);
+              // detected là cột tùy chọn trên bản lưu cũ — fallback về giá trị 0.
+              const detected = analyzed.detected ?? { images: 0, tables: 0, formulas: 0 };
+              const pages = analyzed.pages;
+              const warnings = analyzed.warnings ?? [];
+              const canOcr = needsOcr(document);
+              const pageNumbers = pages.length > 1 ? pages.map((page) => page.page) : [];
+              const activePage = openPageByDoc[document.id] ?? pageNumbers[0] ?? 1;
+              const activePageData = pages.find((page) => page.page === activePage) ?? pages[0];
+
               return (
                 <div key={document.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/60">
                   <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
@@ -314,12 +399,52 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
                           {FILE_KIND_LABELS[document.fileType]}
                         </span>
                         <p className="truncate text-sm font-bold text-slate-800">{document.title}</p>
+                        {document.pageCount ? (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
+                            {document.fileType === 'pptx' ? `${document.pageCount} slide` : `${document.pageCount} trang`}
+                          </span>
+                        ) : null}
+                        {ocrRunningId === document.id || document.ocrStatus === 'pending' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">
+                            <LoaderCircle className="size-3 animate-spin" /> Đang nhận diện chữ...
+                          </span>
+                        ) : document.ocrStatus === 'done' ? (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                            Đã OCR
+                          </span>
+                        ) : document.ocrStatus === 'failed' ? (
+                          <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-700">
+                            OCR lỗi
+                          </span>
+                        ) : null}
                       </div>
+
+                      {/* Hình ảnh / bảng biểu / công thức phát hiện được */}
+                      {detected.images + detected.tables + detected.formulas > 0 ? (
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {detected.images > 0 ? (
+                            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs font-bold text-amber-700 ring-1 ring-amber-200">
+                              {detected.images} hình ảnh
+                            </span>
+                          ) : null}
+                          {detected.tables > 0 ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-sky-50 px-1.5 py-0.5 text-xs font-bold text-sky-700 ring-1 ring-sky-200">
+                              <Table2 className="size-3" /> {detected.tables} bảng biểu
+                            </span>
+                          ) : null}
+                          {detected.formulas > 0 ? (
+                            <span className="rounded bg-violet-50 px-1.5 py-0.5 text-xs font-bold text-violet-700 ring-1 ring-violet-200">
+                              {detected.formulas} dòng công thức
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+
                       <p className="mt-0.5 text-xs font-medium text-slate-500">
                         {document.fileName || '—'} · {formatFileSize(document.fileSize)} ·{' '}
                         {document.content.trim()
                           ? `${formatNumber(document.content.trim().split(/\s+/).length)} từ`
-                          : 'Nội dung dạng ảnh/PDF — AI đọc trực tiếp'}
+                          : 'Nội dung dạng ảnh/PDF scan'}
                         {document.summary ? ' · Đã có tóm tắt AI' : ''}
                       </p>
                     </div>
@@ -333,6 +458,21 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
                         <Eye className="size-3.5" />
                         {open ? 'Đóng' : 'Nội dung'}
                       </button>
+                      {canOcr && aiConfigured !== false ? (
+                        <button
+                          type="button"
+                          onClick={() => void runOcr(document)}
+                          disabled={ocrRunningId !== null || summarizingId !== null}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:opacity-60"
+                        >
+                          {ocrRunningId === document.id ? (
+                            <LoaderCircle className="size-3.5 animate-spin" />
+                          ) : (
+                            <ScanText className="size-3.5" />
+                          )}
+                          Nhận diện chữ bằng AI
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => void handleSummarize(document)}
@@ -358,6 +498,26 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
 
                   {open ? (
                     <div className="border-t border-slate-200 bg-white p-4">
+                      {document.ocrStatus === 'failed' && document.ocrError ? (
+                        <div className="mb-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs font-semibold text-rose-700">
+                          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                          {document.ocrError}
+                        </div>
+                      ) : null}
+
+                      {warnings.length > 0 ? (
+                        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                          <p className="mb-1 text-xs font-bold text-amber-800">Cảnh báo khi đọc tài liệu:</p>
+                          <ul className="list-inside list-disc space-y-0.5">
+                            {warnings.slice(0, 6).map((warning, index) => (
+                              <li key={index} className="text-xs font-medium text-amber-700">
+                                {warning}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
                       {document.summary ? (
                         <div className="mb-3 rounded-xl border border-violet-200 bg-violet-50/60 p-3">
                           <p className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-violet-700">
@@ -368,11 +528,44 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
                           </p>
                         </div>
                       ) : null}
+
+                      {pages.length > 1 ? (
+                        <div className="mb-2 flex flex-wrap gap-1.5">
+                          {pageNumbers.map((pageNumber) => {
+                            const pageData = pages.find((page) => page.page === pageNumber);
+                            return (
+                              <button
+                                key={pageNumber}
+                                type="button"
+                                onClick={() => setOpenPageByDoc((current) => ({ ...current, [document.id]: pageNumber }))}
+                                className={cn(
+                                  'rounded-lg px-2.5 py-1 text-xs font-bold transition',
+                                  activePage === pageNumber
+                                    ? 'bg-violet-600 text-white shadow-sm'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                                  pageData?.status === 'failed' && activePage !== pageNumber ? 'text-rose-600' : '',
+                                  pageData?.status === 'low' && activePage !== pageNumber ? 'text-amber-600' : '',
+                                )}
+                                title={pageData?.status === 'failed' ? 'Trang không đọc được' : pageData?.status === 'low' ? 'Trang ít chữ' : `Trang ${pageNumber}`}
+                              >
+                                {pageNumber}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+
                       {document.content.trim() ? (
                         <div className="max-h-72 overflow-y-auto rounded-xl bg-slate-50 p-3 ring-1 ring-slate-100">
-                          <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600">
-                            {document.content}
-                          </p>
+                          {activePageData ? (
+                            <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600">
+                              {activePageData.text || '(Trang này không có nội dung chữ — có thể là hình ảnh.)'}
+                            </p>
+                          ) : (
+                            <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600">
+                              {document.content}
+                            </p>
+                          )}
                         </div>
                       ) : document.imageData ? (
                         <button type="button" onClick={() => setPreviewImage(document.imageData ?? null)}>
@@ -385,7 +578,10 @@ export function DocumentsTab({ documents, onDocumentsChange }: DocumentsTabProps
                         </button>
                       ) : (
                         <p className="text-xs font-medium text-slate-500">
-                          Tệp này không trích xuất được chữ. AI vẫn sẽ đọc nội dung gốc khi soạn đề.
+                          Tệp này không trích xuất được chữ.
+                          {canOcr && aiConfigured !== false
+                            ? ' Hãy dùng nút "Nhận diện chữ bằng AI" để đọc nội dung.'
+                            : ' Cần API key Gemini để AI đọc trực tiếp nội dung.'}
                         </p>
                       )}
                     </div>

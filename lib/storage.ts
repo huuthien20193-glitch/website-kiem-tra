@@ -1,7 +1,11 @@
 import type {
+  DocumentPage,
   EssayDetail,
   EssayQuestion,
   Exam,
+  ExtraDetail,
+  ExtraQuestion,
+  ExtraQuestionKind,
   Grade,
   McqExplanation,
   McqQuestion,
@@ -11,9 +15,11 @@ import type {
   SubPart,
   TeacherClass,
   TeacherDocument,
+  TrueFalseStatement,
 } from './types';
 import { GRADES } from './types';
 import { answerMatches, round1 } from './utils';
+import { parseDocumentContent } from './documents';
 
 export const STORAGE_KEYS = {
   exams: 'tht_teacher_exams',
@@ -33,9 +39,19 @@ export const STORAGE_KEYS = {
 export type ExamDraft = {
   mcqAnswers: Record<number, number>;
   shortAnswers?: Record<string, string>;
+  /** Bài làm cho câu hỏi mở rộng: nhiều đáp án (choices) và đúng/sai (statements). */
+  extraAnswers?: Record<string, ExtraStudentAnswer>;
   essayImages: Record<string, string[]>;
   deadline?: number;
   savedAt?: number;
+};
+
+/** Bài làm học sinh cho một câu hỏi mở rộng. */
+export type ExtraStudentAnswer = {
+  /** 'multi-mcq': các index phương án học sinh chọn (0..3). */
+  choices?: number[];
+  /** 'true-false': true/false/null theo từng ý nhận định. */
+  statements?: Array<boolean | null>;
 };
 
 const hasWindow = () => typeof window !== 'undefined';
@@ -79,6 +95,44 @@ function normalizeSubPart(raw: Partial<SubPart>, index: number): SubPart {
   };
 }
 
+/** Chuẩn hóa một ý nhận định Đúng/Sai. */
+function normalizeTrueFalseStatement(raw: unknown): TrueFalseStatement {
+  const item = (raw ?? {}) as { text?: unknown; answer?: unknown };
+  return {
+    text: typeof item.text === 'string' ? item.text : '',
+    answer: item.answer === true || item.answer === 'true' || item.answer === 'Đúng' || item.answer === 'dung',
+  };
+}
+
+export function normalizeExtraQuestion(raw: Partial<ExtraQuestion>, index: number): ExtraQuestion {
+  const kind: ExtraQuestionKind = raw?.kind === 'true-false' ? 'true-false' : 'multi-mcq';
+  const options = Array.isArray(raw?.options)
+    ? raw.options.slice(0, 4).map((option) => (typeof option === 'string' ? option : ''))
+    : [];
+  while (options.length < 4) options.push('');
+  const correctIndexes = Array.isArray(raw?.correctIndexes)
+    ? raw.correctIndexes
+        .map((value) => clamp(Math.round(asNumber(value, 0)), 0, 3))
+        .filter((value, index, list) => list.indexOf(value) === index)
+    : [];
+  const statements = Array.isArray(raw?.statements)
+    ? raw.statements.slice(0, 8).map((statement) => normalizeTrueFalseStatement(statement))
+    : [];
+  return {
+    id: raw?.id ?? `extra-${index}-${Date.now()}`,
+    kind,
+    questionLabel:
+      typeof raw?.questionLabel === 'string' && raw.questionLabel ? raw.questionLabel : `Câu ${index + 1}`,
+    points: Math.max(0, asNumber(raw?.points, 0)),
+    content: typeof raw?.content === 'string' ? raw.content : '',
+    questionImage: typeof raw?.questionImage === 'string' ? raw.questionImage : '',
+    options: kind === 'multi-mcq' ? options : undefined,
+    correctIndexes: kind === 'multi-mcq' ? correctIndexes : undefined,
+    statements: kind === 'true-false' ? statements : undefined,
+    explanation: raw?.explanation ? normalizeMcqExplanation(raw.explanation as Partial<McqExplanation>) : undefined,
+  };
+}
+
 export function normalizeEssayQuestion(raw: Partial<EssayQuestion>, index: number): EssayQuestion {
   return {
     id: raw?.id ?? `essay-${index}-${Date.now()}`,
@@ -116,6 +170,8 @@ export function normalizeShortAnswerQuestion(
   raw: Partial<ShortAnswerQuestion>,
   index: number,
 ): ShortAnswerQuestion {
+  const kind: ShortAnswerQuestion['kind'] =
+    raw?.kind === 'fill-blank' || raw?.kind === 'calculation' ? raw.kind : 'text';
   return {
     id: raw?.id ?? `short-${index}-${Date.now()}`,
     questionLabel:
@@ -127,6 +183,7 @@ export function normalizeShortAnswerQuestion(
     content: typeof raw?.content === 'string' ? raw.content : '',
     answer: typeof raw?.answer === 'string' ? raw.answer : '',
     rubric: typeof raw?.rubric === 'string' ? raw.rubric : '',
+    kind,
     explanation: raw?.explanation
       ? normalizeMcqExplanation(raw.explanation as Partial<McqExplanation>)
       : undefined,
@@ -177,6 +234,9 @@ export function normalizeExam(raw: Partial<Exam>): Exam {
     mcqAnswers,
     mcqExplanationEnabled: raw?.mcqExplanationEnabled === true,
     mcqExplanations: normalizeMcqExplanations(raw?.mcqExplanations, mcqCount),
+    extraQuestions: Array.isArray(raw?.extraQuestions)
+      ? raw.extraQuestions.map((question, index) => normalizeExtraQuestion(question, index))
+      : [],
     shortAnswerQuestions: Array.isArray(raw?.shortAnswerQuestions)
       ? raw.shortAnswerQuestions.map((question, index) =>
           normalizeShortAnswerQuestion(question, index),
@@ -261,6 +321,22 @@ export function normalizeSubmission(raw: Partial<Submission>): Submission {
     ? raw.correctMcqAnswers.map((value) => clamp(Math.round(asNumber(value, 0)), 0, 3))
     : [];
 
+  const extraDetails: ExtraDetail[] = Array.isArray(raw?.extraDetails)
+    ? raw.extraDetails.map((detail, index) => ({
+        questionId: detail?.questionId ?? `extra-${index}`,
+        kind: detail?.kind === 'true-false' ? 'true-false' : 'multi-mcq',
+        questionLabel:
+          typeof detail?.questionLabel === 'string' ? detail.questionLabel : `Câu ${index + 1}`,
+        questionContent: typeof detail?.questionContent === 'string' ? detail.questionContent : '',
+        maxPoints: Math.max(0, asNumber(detail?.maxPoints, 0)),
+        correctAnswer: typeof detail?.correctAnswer === 'string' ? detail.correctAnswer : '',
+        studentAnswer: typeof detail?.studentAnswer === 'string' ? detail.studentAnswer : '',
+        correct: Boolean(detail?.correct),
+        score: Math.max(0, asNumber(detail?.score, 0)),
+        comment: typeof detail?.comment === 'string' ? detail.comment : '',
+      }))
+    : [];
+
   return {
     id: String(raw?.id ?? `submission-${Date.now()}`),
     examId: String(raw?.examId ?? ''),
@@ -281,6 +357,7 @@ export function normalizeSubmission(raw: Partial<Submission>): Submission {
           normalizeMcqExplanation((item ?? {}) as Partial<McqExplanation>),
         )
       : [],
+    extraDetails,
     shortAnswerDetails,
     essayDetails,
     status:
@@ -415,18 +492,53 @@ export function clearSubmissions(): Submission[] {
 
 function normalizeDocument(raw: Partial<TeacherDocument>): TeacherDocument {
   const fileType =
-    raw?.fileType === 'pdf' || raw?.fileType === 'docx' || raw?.fileType === 'image'
+    raw?.fileType === 'pdf' ||
+    raw?.fileType === 'docx' ||
+    raw?.fileType === 'pptx' ||
+    raw?.fileType === 'image'
       ? raw.fileType
       : 'text';
+  const content = typeof raw?.content === 'string' ? raw.content : '';
+  // Phân tích lại nội dung có đánh dấu trang để lấy danh sách trang,
+  // số hình/bảng/công thức phát hiện được và cảnh báo (không cần lưu riêng).
+  const analyzed = parseDocumentContent(content);
+  const pages =
+    Array.isArray(raw?.pages) && raw.pages.length > 0
+      ? raw.pages.map((page, index) => ({
+          page: Math.max(1, Math.round(asNumber(page?.page, index + 1))),
+          text: typeof page?.text === 'string' ? page.text : '',
+          words: Math.max(0, Math.round(asNumber(page?.words, 0))),
+          status: page?.status === 'ok' || page?.status === 'low' ? page.status : 'failed',
+        })) satisfies DocumentPage[]
+      : analyzed.pages.length > 0
+        ? analyzed.pages
+        : undefined;
+  const warnings =
+    Array.isArray(raw?.warnings) && raw.warnings.length > 0
+      ? raw.warnings.filter((warning): warning is string => typeof warning === 'string')
+      : analyzed.warnings;
   return {
     id: String(raw?.id ?? `doc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
     title: typeof raw?.title === 'string' && raw.title ? raw.title : 'Tài liệu chưa đặt tên',
     fileName: typeof raw?.fileName === 'string' ? raw.fileName : '',
     fileType,
     fileSize: Math.max(0, Math.round(asNumber(raw?.fileSize, 0))),
-    content: typeof raw?.content === 'string' ? raw.content : '',
+    content,
     imageData: typeof raw?.imageData === 'string' ? raw.imageData : undefined,
     pdfData: typeof raw?.pdfData === 'string' ? raw.pdfData : undefined,
+    pageCount: raw?.pageCount && raw.pageCount > 0 ? Math.round(raw.pageCount) : pages?.length || undefined,
+    pages,
+    detected:
+      raw?.detected && typeof raw.detected === 'object'
+        ? {
+            images: Math.max(0, Math.round(asNumber((raw.detected as { images?: unknown }).images, 0))),
+            tables: Math.max(0, Math.round(asNumber((raw.detected as { tables?: unknown }).tables, 0))),
+            formulas: Math.max(0, Math.round(asNumber((raw.detected as { formulas?: unknown }).formulas, 0))),
+          }
+        : analyzed.detected,
+    warnings,
+    ocrStatus: raw?.ocrStatus === 'done' || raw?.ocrStatus === 'failed' || raw?.ocrStatus === 'pending' ? raw.ocrStatus : undefined,
+    ocrError: typeof raw?.ocrError === 'string' ? raw.ocrError : undefined,
     summary: typeof raw?.summary === 'string' ? raw.summary : undefined,
     createdAt: typeof raw?.createdAt === 'string' ? raw.createdAt : undefined,
   };
@@ -480,6 +592,94 @@ export function saveClasses(classes: TeacherClass[]): boolean {
   return writeJSON(STORAGE_KEYS.classes, classes);
 }
 
+/** Đáp án đúng dạng tóm tắt của câu hỏi mở rộng ("B, D" hoặc "Đ, S, S, Đ"). */
+export function extraCorrectAnswerSummary(question: ExtraQuestion): string {
+  if (question.kind === 'multi-mcq') {
+    return (question.correctIndexes ?? [])
+      .slice()
+      .sort((a, b) => a - b)
+      .map((index) => ['A', 'B', 'C', 'D'][index] ?? '?')
+      .join(', ');
+  }
+  return (question.statements ?? [])
+    .map((statement) => (statement.answer ? 'Đ' : 'S'))
+    .join(', ');
+}
+
+/** Chấm một câu hỏi mở rộng theo bài làm học sinh. */
+export function gradeExtraQuestion(
+  question: ExtraQuestion,
+  answer: ExtraStudentAnswer | undefined,
+): { detail: ExtraDetail; score: number } {
+  const points = Math.max(0, Number(question.points) || 0);
+  const correctSummary = extraCorrectAnswerSummary(question);
+
+  if (question.kind === 'multi-mcq') {
+    const choices = (answer?.choices ?? [])
+      .filter((value) => Number.isInteger(value) && value >= 0 && value <= 3)
+      .filter((value, index, list) => list.indexOf(value) === index);
+    const correctList = [...(question.correctIndexes ?? [])].sort((a, b) => a - b);
+    const chosen = [...choices].sort((a, b) => a - b);
+    const correct =
+      correctList.length > 0 &&
+      chosen.length === correctList.length &&
+      chosen.every((value, index) => value === correctList[index]);
+    return {
+      detail: {
+        questionId: question.id,
+        kind: question.kind,
+        questionLabel: question.questionLabel,
+        questionContent: question.content,
+        maxPoints: points,
+        correctAnswer: correctSummary,
+        studentAnswer: chosen.map((index) => ['A', 'B', 'C', 'D'][index] ?? '?').join(', '),
+        correct,
+        score: correct ? points : 0,
+        comment: '',
+      },
+      score: correct ? points : 0,
+    };
+  }
+
+  // Đúng/Sai: chấm từng ý — mỗi ý đạt points / tổng số ý (điểm lẻ được làm tròn 2 chữ số).
+  const statements = question.statements ?? [];
+  const studentStatements = answer?.statements ?? [];
+  const perStatement = statements.length > 0 ? points / statements.length : points;
+  let earned = 0;
+  let allCorrect = statements.length > 0;
+  statements.forEach((statement, index) => {
+    const studentValue = studentStatements[index];
+    if (studentValue === true || studentValue === false) {
+      const isCorrect = studentValue === statement.answer;
+      if (isCorrect) earned += perStatement;
+      else allCorrect = false;
+    } else {
+      allCorrect = false;
+    }
+  });
+  const score = round1(earned);
+  return {
+    detail: {
+      questionId: question.id,
+      kind: question.kind,
+      questionLabel: question.questionLabel,
+      questionContent: question.content,
+      maxPoints: points,
+      correctAnswer: correctSummary,
+      studentAnswer: statements
+        .map((_, index) => {
+          const value = studentStatements[index];
+          return value === true ? 'Đ' : value === false ? 'S' : '—';
+        })
+        .join(', '),
+      correct: allCorrect && score === round1(points),
+      score,
+      comment: '',
+    },
+    score,
+  };
+}
+
 export function buildSubmission(
   exam: Exam,
   studentName: string,
@@ -487,6 +687,7 @@ export function buildSubmission(
   mcqAnswers: Record<number, number>,
   shortAnswers: Record<string, string>,
   essayImages: Record<string, string[]>,
+  extraAnswers: Record<string, ExtraStudentAnswer> = {},
 ): Submission {
   let mcqCorrectCount = 0;
   for (let index = 0; index < exam.mcqCount; index += 1) {
@@ -515,7 +716,16 @@ export function buildSubmission(
   const shortScore = round1(
     shortAnswerDetails.reduce((sum, detail) => sum + detail.score, 0),
   );
-  const autoScore = round1(mcqScore + shortScore);
+
+  // Chấm tự động các câu hỏi mở rộng (TN nhiều đáp án, Đúng/Sai).
+  const extraQuestions = exam.extraQuestions ?? [];
+  const gradedExtras = extraQuestions.map((question) =>
+    gradeExtraQuestion(question, extraAnswers[String(question.id)]),
+  );
+  const extraDetails = gradedExtras.map((item) => item.detail);
+  const extraScore = round1(gradedExtras.reduce((sum, item) => sum + item.score, 0));
+
+  const autoScore = round1(mcqScore + shortScore + extraScore);
 
   const essayDetails: EssayDetail[] = exam.essayQuestions.map((question) => ({
     questionId: question.id,
@@ -550,6 +760,7 @@ export function buildSubmission(
     mcqQuestions: exam.mcqQuestions ? exam.mcqQuestions.map((item) => (item ? { ...item } : null)) : [],
     mcqExplanationEnabled: exam.mcqExplanationEnabled === true,
     mcqExplanations: exam.mcqExplanations ? [...exam.mcqExplanations] : [],
+    extraDetails,
     shortAnswerDetails,
     essayDetails,
     status: pending ? 'Chờ giáo viên chấm tự luận' : 'Đã chấm điểm hoàn tất',
@@ -558,15 +769,19 @@ export function buildSubmission(
 }
 
 export function totalConfiguredPoints(
-  exam: Pick<Exam, 'mcqCount' | 'mcqPointPerQ' | 'shortAnswerQuestions' | 'essayQuestions'>,
+  exam: Pick<
+    Exam,
+    'mcqCount' | 'mcqPointPerQ' | 'shortAnswerQuestions' | 'essayQuestions' | 'extraQuestions'
+  >,
 ) {
   const mcqPoints = (exam.mcqCount || 0) * (exam.mcqPointPerQ || 0);
   const shortAnswerPoints = (exam.shortAnswerQuestions || []).reduce(
     (sum, question) => sum + (question.points || 0),
     0,
   );
+  const extraPoints = (exam.extraQuestions || []).reduce((sum, question) => sum + (question.points || 0), 0);
   const essayPoints = (exam.essayQuestions || []).reduce((sum, question) => sum + (question.points || 0), 0);
-  return round1(mcqPoints + shortAnswerPoints + essayPoints);
+  return round1(mcqPoints + shortAnswerPoints + extraPoints + essayPoints);
 }
 
 /* ------------------------------ Session / profile ------------------------------ */

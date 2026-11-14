@@ -110,6 +110,17 @@ export function aiChat(messages: ChatEntry[], documents: AiDocumentPayload[]) {
   return post<{ reply: string }>({ action: 'chat', messages, documents });
 }
 
+export type AiLevelRatios = {
+  /** Nhận biết (%) */
+  recognize: number;
+  /** Thông hiểu (%) */
+  understand: number;
+  /** Vận dụng (%) */
+  apply: number;
+  /** Vận dụng cao (%) */
+  applyHigh: number;
+};
+
 export type AiExamOptions = {
   subject: string;
   grade: number;
@@ -121,6 +132,20 @@ export type AiExamOptions = {
   difficulty: string;
   examType: string;
   notes: string;
+  /** Chủ đề/chương cần ra đề (tùy chọn — rỗng là cả tài liệu). */
+  topic?: string;
+  /** Chỉ dùng kiến thức trong tài liệu, không thêm kiến thức ngoài. */
+  useOnlyDocument?: boolean;
+  /** Tỉ lệ mức độ nhận biết → thông hiểu → vận dụng → vận dụng cao (%). */
+  levelRatios?: AiLevelRatios;
+  /** Số câu trắc nghiệm nhiều đáp án. */
+  multiMcqCount?: number;
+  /** Số câu đúng/sai (4 ý nhận định). */
+  trueFalseCount?: number;
+  /** Số câu điền khuyết. */
+  fillBlankCount?: number;
+  /** Số câu tính toán. */
+  calculationCount?: number;
 };
 
 export type AiMcqDraft = {
@@ -131,6 +156,36 @@ export type AiMcqDraft = {
 };
 
 export type AiShortDraft = {
+  content?: unknown;
+  answer?: unknown;
+  points?: unknown;
+  explanation?: unknown;
+  kind?: unknown;
+};
+
+export type AiMultiMcqDraft = {
+  content?: unknown;
+  options?: unknown;
+  correctIndexes?: unknown;
+  points?: unknown;
+  explanation?: unknown;
+};
+
+export type AiTrueFalseDraft = {
+  content?: unknown;
+  statements?: Array<{ text?: unknown; answer?: unknown }>;
+  points?: unknown;
+  explanation?: unknown;
+};
+
+export type AiFillBlankDraft = {
+  content?: unknown;
+  blanks?: Array<{ answer?: unknown }>;
+  points?: unknown;
+  explanation?: unknown;
+};
+
+export type AiCalculationDraft = {
   content?: unknown;
   answer?: unknown;
   points?: unknown;
@@ -151,10 +206,35 @@ export type AiExamDraft = {
   durationMinutes?: unknown;
   totalPoints?: unknown;
   mcq?: AiMcqDraft[];
+  multiMcq?: AiMultiMcqDraft[];
+  trueFalse?: AiTrueFalseDraft[];
+  fillBlanks?: AiFillBlankDraft[];
+  calculations?: AiCalculationDraft[];
   shortAnswers?: AiShortDraft[];
   essays?: AiEssayDraft[];
 };
 
 export function aiGenerateExam(documents: AiDocumentPayload[], options: AiExamOptions) {
   return post<{ draft: AiExamDraft }>({ action: 'generate-exam', documents, options });
+}
+
+/** Nhận diện chữ (OCR) một tài liệu scan/ảnh bằng AI đa phương thức. */
+export function aiOcrDocument(document: AiDocumentPayload) {
+  return post<{ text: string }>({ action: 'ocr', document });
+}
+
+/** Yêu cầu AI tạo lại MỘT câu hỏi (không đụng tới các câu khác). */
+export type AiRegenerateRequest = {
+  documents: AiDocumentPayload[];
+  kind: 'mcq' | 'multi-mcq' | 'true-false' | 'fill-blank' | 'short' | 'calculation' | 'essay';
+  subject: string;
+  grade: number;
+  topic?: string;
+  instruction?: string;
+  /** Nội dung các câu hiện có — để AI tránh trùng lặp. */
+  exclude?: string[];
+};
+
+export function aiRegenerateQuestion(request: AiRegenerateRequest) {
+  return post<{ question: Record<string, unknown> }>({ action: 'regenerate-question', ...request });
 }
