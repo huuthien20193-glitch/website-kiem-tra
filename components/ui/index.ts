@@ -10,6 +10,7 @@ export { Card } from './Card';
 export { Badge, type BadgeTone } from './Badge';
 export { PageHeader } from './PageHeader';
 export { EmptyState } from './EmptyState';
+export { NumberInput, type NumberInputProps } from './NumberInput';
 export {
   Skeleton,
   StatsRowSkeleton,

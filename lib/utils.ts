@@ -12,6 +12,15 @@ export function formatNumber(value: number, digits = 1) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(digits);
 }
 
+/**
+ * Cắt nhiễu dấu phẩy động (0.30000000000000004 → 0.3) nhưng giữ nguyên
+ * các chữ số thập phân giáo viên nhập — không làm tròn về 0.25/0.5.
+ */
+export function trimFloat(value: number, digits = 8) {
+  if (!Number.isFinite(value)) return 0;
+  return Number(value.toFixed(digits));
+}
+
 export function isPending(status?: string) {
   return (status || '').toLowerCase().includes('chờ');
 }

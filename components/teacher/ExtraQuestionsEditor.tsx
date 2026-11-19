@@ -12,6 +12,7 @@ import {
 import type { ExtraQuestion } from '@/lib/types';
 import { EXTRA_KIND_LABELS, OPTION_LABELS } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { ProvenanceBadges } from './CreateExamTab';
 
 type ExtraQuestionsEditorProps = {
@@ -155,12 +156,11 @@ export function ExtraQuestionsEditor({
                   {EXTRA_KIND_LABELS[question.kind]}
                 </span>
                 <span className="text-xs font-bold text-slate-500">Điểm:</span>
-                <input
-                  type="number"
+                <NumberInput
                   min={0}
-                  step={0.25}
                   value={question.points}
-                  onChange={(event) => update(question.id, { points: Number(event.target.value) })}
+                  onValueChange={(points) => update(question.id, { points })}
+                  aria-label={`Điểm ${question.questionLabel || 'câu hỏi'}`}
                   className="w-16 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-center text-xs font-bold text-slate-700 outline-none"
                 />
               </div>

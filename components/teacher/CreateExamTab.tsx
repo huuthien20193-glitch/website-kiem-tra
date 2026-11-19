@@ -31,9 +31,10 @@ import type {
   TeacherDocument,
 } from '@/lib/types';
 import { GRADES, OPTION_LABELS, SHORT_KIND_LABELS, SUBJECTS } from '@/lib/types';
-import { cn, formatNumber } from '@/lib/utils';
+import { cn, formatNumber, trimFloat } from '@/lib/utils';
 import { imageFilesFromClipboard, optimizeImage } from '@/lib/image';
 import { useToast } from '@/components/ui/FeedbackProvider';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { AiExamPanel } from '@/components/teacher/AiExamPanel';
 import { ExtraQuestionsEditor } from '@/components/teacher/ExtraQuestionsEditor';
 import {
@@ -219,7 +220,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
     () => essayQuestions.reduce((sum, question) => sum + question.points, 0),
     [essayQuestions],
   );
-  const configuredPoints = Number((mcqPoints + shortAnswerPoints + extraPoints + essayPoints).toFixed(2));
+  const configuredPoints = trimFloat(mcqPoints + shortAnswerPoints + extraPoints + essayPoints);
   const pointsMismatch = Math.abs(configuredPoints - totalPoints) > 0.01;
 
   const updateMcqCount = (value: number) => {
@@ -410,7 +411,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
             points: Math.max(0, aiNumber(part?.points, 1)),
           }))
         : [{ label: 'a', content: String(item?.content ?? '').trim(), points: 2 }];
-      const total = Number(subParts.reduce((sum, part) => sum + part.points, 0).toFixed(2));
+      const total = trimFloat(subParts.reduce((sum, part) => sum + part.points, 0));
       return {
         id: newId(),
         questionLabel: `Câu ${nextMcqCount + nextExtra.length + nextShort.length + index + 1}`,
@@ -907,7 +908,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
     setEssayQuestions((current) =>
       current.map((question) => {
         if (question.id !== questionId) return question;
-        const total = Number(question.subParts.reduce((sum, part) => sum + part.points, 0).toFixed(2));
+        const total = trimFloat(question.subParts.reduce((sum, part) => sum + part.points, 0));
         return { ...question, points: total };
       }),
     );
@@ -992,7 +993,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
       title: title.trim(),
       subject,
       grade,
-      durationMinutes: Math.round(durationMinutes),
+      durationMinutes: Number(durationMinutes),
       totalPoints: Number(totalPoints),
       status: 'Đã xuất bản',
       type: examType,
@@ -1156,12 +1157,13 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                 Thời gian làm bài (phút) <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="number"
+              <NumberInput
+                allowDecimal={false}
                 min={1}
                 max={300}
                 value={durationMinutes}
-                onChange={(event) => setDurationMinutes(Number(event.target.value))}
+                onValueChange={setDurationMinutes}
+                aria-label="Thời gian làm bài (phút)"
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-emerald-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
@@ -1200,12 +1202,11 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
                 Thang điểm tổng
               </label>
-              <input
-                type="number"
-                min={1}
-                step={0.5}
+              <NumberInput
+                min={0}
                 value={totalPoints}
-                onChange={(event) => setTotalPoints(Number(event.target.value))}
+                onValueChange={setTotalPoints}
+                aria-label="Thang điểm tổng"
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-teal-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
@@ -1277,23 +1278,23 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-bold text-slate-600">Số lượng câu trắc nghiệm</label>
-              <input
-                type="number"
+              <NumberInput
+                allowDecimal={false}
                 min={1}
                 max={60}
                 value={mcqCount}
-                onChange={(event) => updateMcqCount(Number(event.target.value))}
+                onValueChange={updateMcqCount}
+                aria-label="Số lượng câu trắc nghiệm"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-bold outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-bold text-slate-600">Điểm mỗi câu</label>
-              <input
-                type="number"
-                min={0.1}
-                step={0.25}
+              <NumberInput
+                min={0}
                 value={mcqPointPerQ}
-                onChange={(event) => setMcqPointPerQ(Number(event.target.value))}
+                onValueChange={setMcqPointPerQ}
+                aria-label="Điểm mỗi câu trắc nghiệm"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-bold text-emerald-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
@@ -1817,14 +1818,11 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                       </span>
                     ) : null}
                     <span className="text-xs font-bold text-slate-500">Điểm câu:</span>
-                    <input
-                      type="number"
+                    <NumberInput
                       min={0}
-                      step={0.25}
                       value={question.points}
-                      onChange={(event) =>
-                        updateShortAnswer(question.id, { points: Number(event.target.value) })
-                      }
+                      onValueChange={(points) => updateShortAnswer(question.id, { points })}
+                      aria-label={`Điểm ${question.questionLabel || 'câu trả lời ngắn'}`}
                       className="w-20 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-center text-xs font-bold text-sky-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
                     />
                   </div>
@@ -2079,7 +2077,7 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
 
           <div className="space-y-5">
             {essayQuestions.map((question, questionIndex) => {
-              const subPartTotal = Number(question.subParts.reduce((sum, part) => sum + part.points, 0).toFixed(2));
+              const subPartTotal = trimFloat(question.subParts.reduce((sum, part) => sum + part.points, 0));
               const outOfSync = Math.abs(subPartTotal - question.points) > 0.01;
               return (
                 <div
@@ -2101,12 +2099,11 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                         className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-emerald-700 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
                       />
                       <span className="text-xs font-bold text-slate-500">Điểm câu:</span>
-                      <input
-                        type="number"
+                      <NumberInput
                         min={0}
-                        step={0.25}
                         value={question.points}
-                        onChange={(event) => updateEssay(question.id, { points: Number(event.target.value) })}
+                        onValueChange={(points) => updateEssay(question.id, { points })}
+                        aria-label={`Điểm ${question.questionLabel || 'câu tự luận'}`}
                         className="w-20 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-center text-xs font-bold text-emerald-700 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
@@ -2223,12 +2220,11 @@ export function CreateExamTab({ onCreate, onCancel, documents = [] }: CreateExam
                             className="min-w-0 flex-1 bg-transparent px-1 py-1 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-500"
                           />
                           <div className="flex shrink-0 items-center gap-1">
-                            <input
-                              type="number"
+                            <NumberInput
                               min={0}
-                              step={0.25}
                               value={part.points}
-                              onChange={(event) => updateSubPart(question.id, partIndex, { points: Number(event.target.value) })}
+                              onValueChange={(points) => updateSubPart(question.id, partIndex, { points })}
+                              aria-label={`Điểm ý ${part.label}`}
                               className="w-14 rounded-lg border border-slate-200 bg-slate-50 px-1 py-1 text-center text-xs font-bold text-emerald-700 outline-none"
                             />
                             <span className="text-xs font-bold text-slate-500">đ</span>
