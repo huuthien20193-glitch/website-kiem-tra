@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Award,
@@ -15,7 +15,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import type { Exam, Grade, Submission, TeacherDocument, TeacherTab } from '@/lib/types'
+import type { Exam, ExamAnswerKey, Grade, Submission, TeacherDocument, TeacherTab } from '@/lib/types'
 import { DEFAULT_TEACHER_NAME } from '@/lib/types'
 import { clearSession, getSession, loadDocuments, loadExams, loadSubmissions, saveExams, saveSubmissions } from '@/lib/storage'
 import { cn, formatNumber, isPending } from '@/lib/utils'
@@ -39,6 +39,7 @@ import { CreateExamTab } from '@/components/teacher/CreateExamTab'
 import { DocumentsTab } from '@/components/teacher/DocumentsTab'
 import { SubmissionsTab } from '@/components/teacher/SubmissionsTab'
 import { GradingModal } from '@/components/teacher/GradingModal'
+import { AnswerKeyModal } from '@/components/teacher/AnswerKeyModal'
 
 const NAV_ITEMS: Array<{ key: TeacherTab; label: string; icon: typeof LayoutDashboard; hint: string }> = [
   { key: 'overview', label: 'Tổng quan', icon: LayoutDashboard, hint: 'Bảng điều khiển' },
@@ -60,48 +61,92 @@ export default function TeacherDashboard() {
   const [documents, setDocuments] = useState<TeacherDocument[]>([])
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [submissionsLoading, setSubmissionsLoading] = useState(true)
+  const [submissionsError, setSubmissionsError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [gradingSubmission, setGradingSubmission] = useState<Submission | null>(null)
+  const [answerKeyExam, setAnswerKeyExam] = useState<Exam | null>(null)
+  /** ID các bài nộp đã biết — dùng để phát hiện bài mới khi tự động tải lại. */
+  const knownSubmissionIds = useRef<Set<string> | null>(null)
 
   // Tên giáo viên lấy từ phiên đăng nhập; chỉ dự phòng bằng hằng số chung khi session rỗng.
   const teacherName = session.username || DEFAULT_TEACHER_NAME
 
   // Tải danh sách đề thi: ưu tiên Supabase, dự phòng localStorage khi mất mạng.
+  // Không bao giờ ghi đè danh sách đang có bằng dữ liệu local rỗng.
   const fetchExams = async () => {
-    const cloud = await fetchExamsFromCloud()
-    if (cloud) {
-      setExams(cloud)
-      saveExams(cloud)
-      return
+    try {
+      const cloud = await fetchExamsFromCloud()
+      if (cloud) {
+        setExams(cloud)
+        saveExams(cloud)
+        return
+      }
+    } catch (error) {
+      console.error('Lỗi khi tải đề thi:', error)
     }
-    setExams(typeof window !== 'undefined' ? loadExams() : [])
+    setExams((current) => {
+      if (current.length > 0) return current
+      return typeof window !== 'undefined' ? loadExams() : []
+    })
   }
 
   // Tải tài liệu học tập: ưu tiên Supabase, dự phòng localStorage.
   const fetchDocuments = async () => {
-    const cloud = await fetchDocumentsFromCloud()
-    if (cloud) {
-      setDocuments(cloud)
-      return
+    try {
+      const cloud = await fetchDocumentsFromCloud()
+      if (cloud) {
+        setDocuments(cloud)
+        return
+      }
+    } catch (error) {
+      console.error('Lỗi khi tải tài liệu:', error)
     }
-    setDocuments(typeof window !== 'undefined' ? loadDocuments() : [])
+    setDocuments((current) => {
+      if (current.length > 0) return current
+      return typeof window !== 'undefined' ? loadDocuments() : []
+    })
   }
 
-  // Tải danh sách bài nộp từ Supabase.
-  // Tải bài nộp từ Supabase (dự phòng localStorage khi mất mạng).
-  const fetchSubmissions = async () => {
-    setSubmissionsLoading(true)
+  // Tải danh sách bài nộp từ Supabase (dự phòng localStorage khi mất mạng).
+  // Hàm này được gọi lặp lại mỗi 15 giây nên học sinh nộp bài là giáo viên thấy ngay.
+  const fetchSubmissions = useCallback(async (silent = false) => {
+    if (!silent) setSubmissionsLoading(true)
     try {
       const cloud = await fetchSubmissionsFromCloud()
       if (cloud) {
+        const previous = knownSubmissionIds.current
+        if (previous) {
+          const fresh = cloud.filter((submission) => !previous.has(submission.id))
+          if (fresh.length > 0) {
+            toast.info(
+              fresh.length === 1 ? 'Có bài nộp mới' : `Có ${fresh.length} bài nộp mới`,
+              fresh.length === 1
+                ? `${fresh[0].studentName} vừa nộp "${fresh[0].examTitle}".`
+                : 'Danh sách bài nộp vừa được cập nhật.',
+            )
+          }
+        }
+        knownSubmissionIds.current = new Set(cloud.map((submission) => submission.id))
         setSubmissions(cloud)
+        setSubmissionsError(null)
         return
       }
-      setSubmissions(typeof window !== 'undefined' ? loadSubmissions() : [])
+      setSubmissionsError('Máy chủ không phản hồi hoặc chưa được cấu hình.')
+      setSubmissions((current) => {
+        if (current.length > 0) return current
+        return typeof window !== 'undefined' ? loadSubmissions() : []
+      })
+    } catch (error) {
+      console.error('Lỗi khi tải bài nộp:', error)
+      setSubmissionsError(error instanceof Error ? error.message : 'Lỗi kết nối máy chủ.')
+      setSubmissions((current) => {
+        if (current.length > 0) return current
+        return typeof window !== 'undefined' ? loadSubmissions() : []
+      })
     } finally {
-      setSubmissionsLoading(false)
+      if (!silent) setSubmissionsLoading(false)
     }
-  }
+  }, [toast])
 
   // Tải dữ liệu khi mở trang
   useEffect(() => {
@@ -113,19 +158,35 @@ export default function TeacherDashboard() {
     }, 0)
     return () => clearTimeout(timer)
      
-  }, [])
+  }, [fetchSubmissions])
+
+  // Tự động làm mới bài nộp mỗi 15 giây — không cần giáo viên bấm tải lại.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      void fetchSubmissions(true)
+    }, 15_000)
+    return () => clearInterval(timer)
+     
+  }, [fetchSubmissions])
 
   // Tải lại dữ liệu khi quay lại tab trình duyệt
   useEffect(() => {
     const handleFocus = () => {
-      fetchExams()
-      fetchSubmissions()
-      fetchDocuments()
+      void fetchExams()
+      void fetchSubmissions()
+      void fetchDocuments()
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') handleFocus()
     }
     window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
      
-  }, [])
+  }, [fetchSubmissions])
 
   useEffect(() => {
     if (isClient && session.role !== 'TEACHER') {
@@ -191,6 +252,34 @@ export default function TeacherDashboard() {
     toast.success('Đã đổi khối lớp', `${exam.title} → Lớp ${grade}`)
   }
 
+  // Lưu đáp án công bố của đề. Nội dung rỗng thì xóa hẳn để dữ liệu gọn nhẹ.
+  const handleSaveAnswerKey = async (answerKey: ExamAnswerKey): Promise<boolean> => {
+    if (!answerKeyExam) return false
+
+    const hasContent = answerKey.text.trim().length > 0 || answerKey.images.length > 0
+    const updated: Exam = {
+      ...answerKeyExam,
+      answerKey: hasContent ? answerKey : undefined,
+    }
+
+    const result = await saveExamToCloud(updated)
+    if (!result.ok) {
+      toast.error('Không thể lưu đáp án', result.message ?? 'Vui lòng thử lại.')
+      return false
+    }
+
+    const next = exams.map((item) => (item.id === updated.id ? updated : item))
+    setExams(next)
+    saveExams(next)
+    toast.success(
+      'Đã lưu đáp án',
+      answerKey.enabled
+        ? 'Học sinh sẽ xem được đáp án sau khi nộp bài.'
+        : 'Đáp án đã lưu nhưng đang tạm ẩn với học sinh.',
+    )
+    return true
+  }
+
   // Nhân bản đề: tạo một bản sao với id mới và tên thêm "(bản sao)".
   // Copy sâu (deep copy) các mảng lồng nhau — nếu chỉ copy tham chiếu thì sửa
   // câu hỏi của bản sao sẽ làm thay đổi cả đề gốc.
@@ -213,6 +302,9 @@ export default function TeacherDashboard() {
         ...question,
         subParts: question.subParts.map((part) => ({ ...part })),
       })),
+      answerKey: exam.answerKey
+        ? { ...exam.answerKey, images: [...exam.answerKey.images] }
+        : undefined,
     }
 
     const result = await saveExamToCloud(copy)
@@ -482,6 +574,7 @@ export default function TeacherDashboard() {
               onDelete={handleDeleteExam}
               onDuplicate={handleDuplicateExam}
               onUpdateGrade={handleUpdateExamGrade}
+              onEditAnswerKey={(exam) => setAnswerKeyExam(exam)}
             />
           ) : null}
 
@@ -497,6 +590,8 @@ export default function TeacherDashboard() {
             <SubmissionsTab
               submissions={submissions}
               isLoading={submissionsLoading}
+              error={submissionsError}
+              onRefresh={() => void fetchSubmissions()}
               onGrade={(submission) => setGradingSubmission(submission)}
               onDelete={handleDeleteSubmission}
               onClearAll={handleClearAllSubmissions}
@@ -511,6 +606,14 @@ export default function TeacherDashboard() {
           submission={gradingSubmission}
           onClose={() => setGradingSubmission(null)}
           onSave={handleSaveGrading}
+        />
+      ) : null}
+
+      {answerKeyExam ? (
+        <AnswerKeyModal
+          exam={answerKeyExam}
+          onClose={() => setAnswerKeyExam(null)}
+          onSave={handleSaveAnswerKey}
         />
       ) : null}
     </div>

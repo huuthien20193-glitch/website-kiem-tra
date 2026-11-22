@@ -7,6 +7,7 @@ import {
   Copy,
   Download,
   GraduationCap,
+  KeyRound,
   Layers,
   Plus,
   Search,
@@ -144,9 +145,10 @@ type ExamsTabProps = {
   onDelete: (exam: Exam) => void;
   onDuplicate: (exam: Exam) => void;
   onUpdateGrade: (exam: Exam, grade: Grade) => void | Promise<void>;
+  onEditAnswerKey: (exam: Exam) => void;
 };
 
-export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade }: ExamsTabProps) {
+export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade, onEditAnswerKey }: ExamsTabProps) {
   const toast = useToast();
   const [keyword, setKeyword] = useState('');
   const [subject, setSubject] = useState('all');
@@ -921,6 +923,29 @@ export function ExamsTab({ exams, onCreate, onDelete, onDuplicate, onUpdateGrade
                   <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Tự luận</p>
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => onEditAnswerKey(exam)}
+                className="mt-3 flex w-full items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-emerald-200 hover:bg-emerald-50/50"
+              >
+                <span className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                  <KeyRound className="size-3.5 text-emerald-600" />
+                  Đáp án công bố
+                </span>
+                <span
+                  className={cn(
+                    'rounded-full px-2 py-0.5 text-xs font-bold',
+                    exam.answerKey?.enabled
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : exam.answerKey
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-slate-100 text-slate-500',
+                  )}
+                >
+                  {exam.answerKey?.enabled ? 'Đang bật' : exam.answerKey ? 'Đang ẩn' : 'Chưa đặt'}
+                </span>
+              </button>
 
               <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
                 <span className="text-xs font-semibold text-slate-500">

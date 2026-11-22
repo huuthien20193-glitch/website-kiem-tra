@@ -146,6 +146,21 @@ export type ShortAnswerQuestion = {
 
 export type ExamType = 'official' | 'practice';
 
+/**
+ * Đáp án đầy đủ do giáo viên công bố cho học sinh xem sau khi nộp bài.
+ * Lưu ngay trong `Exam` (cột `data` jsonb trên Supabase) nên không cần đổi schema.
+ */
+export type ExamAnswerKey = {
+  /** Giáo viên bật để học sinh xem được đáp án sau khi nộp bài. */
+  enabled: boolean;
+  /** Nội dung đáp án / hướng dẫn giải (giữ nguyên xuống dòng). */
+  text: string;
+  /** Ảnh đáp án hoặc ảnh bài giải (data URL). */
+  images: string[];
+  /** Lần cập nhật gần nhất (ISO). */
+  updatedAt?: string;
+};
+
 export type Exam = {
   id: string;
   title: string;
@@ -169,6 +184,8 @@ export type Exam = {
   extraQuestions?: ExtraQuestion[];
   shortAnswerQuestions: ShortAnswerQuestion[];
   essayQuestions: EssayQuestion[];
+  /** Đáp án đầy đủ công bố cho học sinh sau khi nộp bài (tùy chọn). */
+  answerKey?: ExamAnswerKey;
   createdAt?: string;
 };
 

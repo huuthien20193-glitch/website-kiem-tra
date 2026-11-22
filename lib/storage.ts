@@ -3,6 +3,7 @@ import type {
   EssayDetail,
   EssayQuestion,
   Exam,
+  ExamAnswerKey,
   ExtraDetail,
   ExtraQuestion,
   ExtraQuestionKind,
@@ -18,7 +19,7 @@ import type {
   TeacherDocument,
   TrueFalseStatement,
 } from './types';
-import { GRADES } from './types';
+import { GRADES, OPTION_LABELS, SHORT_KIND_LABELS } from './types';
 import { answerMatches, round1 } from './utils';
 import { parseDocumentContent } from './documents';
 
@@ -248,6 +249,23 @@ function normalizeMcqQuestions(raw: unknown, mcqCount: number): (McqQuestion | n
   });
 }
 
+/** Chuẩn hóa đáp án công bố của đề (đề cũ chưa có trường này). */
+export function normalizeAnswerKey(raw: Partial<ExamAnswerKey> | undefined): ExamAnswerKey | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const text = typeof raw.text === 'string' ? raw.text : '';
+  const images = Array.isArray(raw.images)
+    ? raw.images.filter((image): image is string => typeof image === 'string')
+    : [];
+  // Đề chưa từng đặt đáp án thì không tạo object rỗng để tránh phình dữ liệu.
+  if (!raw.enabled && !text.trim() && images.length === 0) return undefined;
+  return {
+    enabled: raw.enabled === true,
+    text,
+    images,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+  };
+}
+
 export function normalizeExam(raw: Partial<Exam>): Exam {
   const mcqCount = clamp(Math.round(asNumber(raw?.mcqCount, 0)), 0, 100);
   const mcqAnswers = Array.from({ length: mcqCount }, (_, index) => {
@@ -284,6 +302,7 @@ export function normalizeExam(raw: Partial<Exam>): Exam {
     essayQuestions: Array.isArray(raw?.essayQuestions)
       ? raw.essayQuestions.map((question, index) => normalizeEssayQuestion(question, index))
       : [],
+    answerKey: normalizeAnswerKey(raw?.answerKey),
     createdAt: typeof raw?.createdAt === 'string' ? raw.createdAt : undefined,
   };
 }
@@ -637,12 +656,99 @@ export function extraCorrectAnswerSummary(question: ExtraQuestion): string {
     return (question.correctIndexes ?? [])
       .slice()
       .sort((a, b) => a - b)
-      .map((index) => ['A', 'B', 'C', 'D'][index] ?? '?')
+      .map((index) => OPTION_LABELS[index] ?? '?')
       .join(', ');
   }
   return (question.statements ?? [])
     .map((statement) => (statement.answer ? 'Đ' : 'S'))
     .join(', ');
+}
+
+/** Rút gọn nội dung câu hỏi thành một dòng ngắn để chèn vào đáp án. */
+function answerKeySnippet(value: string | undefined, max = 90): string {
+  const text = (value ?? '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+/**
+ * Tự động soạn đáp án đầy đủ từ dữ liệu đề đã có (trắc nghiệm, câu mở rộng,
+ * trả lời ngắn, tự luận). Giáo viên có thể sửa lại trước khi công bố.
+ */
+export function buildAnswerKeyText(exam: Exam): string {
+  const lines: string[] = [];
+  lines.push(`ĐÁP ÁN – ${exam.title}`);
+
+  const meta = [
+    exam.subject,
+    exam.grade ? `Lớp ${exam.grade}` : '',
+    `${exam.durationMinutes} phút`,
+    `${exam.totalPoints} điểm`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  if (meta) lines.push(meta);
+  lines.push('');
+
+  const mcqCount = Math.min(exam.mcqCount, exam.mcqAnswers.length);
+  if (mcqCount > 0) {
+    lines.push(`PHẦN TRẮC NGHIỆM (${mcqCount} câu)`);
+    for (let index = 0; index < mcqCount; index += 1) {
+      const answer = OPTION_LABELS[exam.mcqAnswers[index]] ?? '?';
+      const snippet = answerKeySnippet(exam.mcqQuestions?.[index]?.content);
+      lines.push(`Câu ${index + 1}: ${answer}${snippet ? ` — ${snippet}` : ''}`);
+    }
+    lines.push('');
+  }
+
+  const extraQuestions = exam.extraQuestions ?? [];
+  if (extraQuestions.length > 0) {
+    lines.push(`PHẦN CÂU HỎI MỞ RỘNG (${extraQuestions.length} câu)`);
+    extraQuestions.forEach((question, index) => {
+      const label = question.questionLabel || `Câu ${index + 1}`;
+      const kindLabel = question.kind === 'true-false' ? 'Đúng/Sai' : 'TN nhiều đáp án';
+      const answer = extraCorrectAnswerSummary(question) || 'Chưa có đáp án';
+      const snippet = answerKeySnippet(question.content);
+      lines.push(`${label} (${kindLabel}, ${question.points} điểm): ${answer}`);
+      if (snippet) lines.push(`   Nội dung: ${snippet}`);
+      const explanation = question.explanation?.text?.trim();
+      if (explanation) lines.push(`   Giải thích: ${explanation.replace(/\n/g, '\n   ')}`);
+    });
+    lines.push('');
+  }
+
+  const shortQuestions = exam.shortAnswerQuestions ?? [];
+  if (shortQuestions.length > 0) {
+    lines.push(`PHẦN TRẢ LỜI NGẮN (${shortQuestions.length} câu)`);
+    shortQuestions.forEach((question, index) => {
+      const label = question.questionLabel || `Câu ${index + 1}`;
+      const kindLabel = SHORT_KIND_LABELS[question.kind ?? 'text'];
+      lines.push(`${label} (${kindLabel}, ${question.points} điểm): ${question.answer || 'Chưa có đáp án'}`);
+      const snippet = answerKeySnippet(question.content);
+      if (snippet) lines.push(`   Nội dung: ${snippet}`);
+      if (question.rubric?.trim()) lines.push(`   Hướng dẫn chấm: ${question.rubric.trim()}`);
+      if (question.explanation?.text?.trim()) lines.push(`   Giải thích: ${question.explanation.text.trim()}`);
+    });
+    lines.push('');
+  }
+
+  const essayQuestions = exam.essayQuestions ?? [];
+  if (essayQuestions.length > 0) {
+    lines.push(`PHẦN TỰ LUẬN (${essayQuestions.length} câu) — giáo viên bổ sung lời giải chi tiết`);
+    essayQuestions.forEach((question, index) => {
+      const label = question.questionLabel || `Câu ${index + 1}`;
+      lines.push(`${label} (${question.points} điểm)`);
+      (question.subParts ?? []).forEach((part) => {
+        const content = answerKeySnippet(part.content, 160) || part.label;
+        lines.push(`   ${part.label}) ${content}${part.points ? ` — ${part.points} điểm` : ''}`);
+      });
+      if (question.rubric?.trim()) lines.push(`   Hướng dẫn chấm: ${question.rubric.trim()}`);
+    });
+    lines.push('');
+  }
+
+  lines.push('— Hết —');
+  return lines.join('\n').trim();
 }
 
 /** Chấm một câu hỏi mở rộng theo bài làm học sinh. */

@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   Award,
   CheckCircle2,
   Clock3,
   Download,
   Inbox,
+  RefreshCw,
   Search,
   Trash2,
   X,
@@ -20,6 +22,9 @@ type StatusFilter = 'all' | 'pending' | 'done'
 type SubmissionsTabProps = {
   submissions: Submission[]
   isLoading?: boolean
+  /** Lỗi tải dữ liệu từ máy chủ (nếu có) — hiển thị băng cảnh báo thay vì im lặng. */
+  error?: string | null
+  onRefresh?: () => void
   onGrade: (submission: Submission) => void
   onDelete: (id: string) => void
   onClearAll: () => void
@@ -44,6 +49,8 @@ function StatusBadge({ status }: { status: string }) {
 export function SubmissionsTab({
   submissions,
   isLoading = false,
+  error = null,
+  onRefresh,
   onGrade,
   onDelete,
   onClearAll,
@@ -88,6 +95,17 @@ export function SubmissionsTab({
           <p className="mt-1 text-sm text-slate-500">Theo dõi bài nộp, chấm tự luận và xuất bảng điểm cho giáo viên.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {onRefresh ? (
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
+              Tải lại
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onExport}
@@ -107,6 +125,26 @@ export function SubmissionsTab({
           </button>
         </div>
       </header>
+
+      {error ? (
+        <div className="flex flex-col gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-700 sm:flex-row sm:items-center sm:justify-between">
+          <span className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span>
+              Không tải được bài nộp mới từ máy chủ. {error} Đang hiển thị dữ liệu đã lưu trên thiết bị này.
+            </span>
+          </span>
+          {onRefresh ? (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-bold text-rose-600 ring-1 ring-rose-200 transition hover:bg-rose-100"
+            >
+              Thử lại
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[

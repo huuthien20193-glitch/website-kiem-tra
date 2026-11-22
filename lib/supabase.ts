@@ -17,6 +17,8 @@ export function createClient() {
 
 const MISSING_DATA_COLUMN = /'data'|"data"|data.*does not exist|PGRST204/i
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 function errorMessage(error: { message?: string; code?: string } | null | undefined) {
   if (!error) return 'Lỗi không xác định.'
   return [error.code, error.message].filter(Boolean).join(' · ')
@@ -105,6 +107,20 @@ export async function fetchExamsFromCloud(): Promise<Exam[] | null> {
   }
 
   return (data ?? []).map((row) => mapRowToExam(row as ExamRow & Record<string, unknown>))
+}
+
+export async function fetchExamFromCloud(id: string): Promise<Exam | null> {
+  const supabase = createClient()
+  if (!supabase || !UUID_PATTERN.test(id)) return null
+
+  const { data, error } = await supabase.from('exams').select('*').eq('id', id).maybeSingle()
+
+  if (error) {
+    console.error('Không thể tải đề thi từ Supabase:', errorMessage(error))
+    return null
+  }
+
+  return data ? mapRowToExam(data as ExamRow & Record<string, unknown>) : null
 }
 
 export async function saveExamToCloud(exam: Exam): Promise<{ ok: boolean; message?: string }> {
@@ -388,8 +404,6 @@ export async function insertSubmissionToCloud(
 
   return { ok: true }
 }
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * Cập nhật một bài nộp lên Supabase (dùng khi giáo viên chấm điểm).

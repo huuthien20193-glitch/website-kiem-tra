@@ -1,19 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   Award,
   CheckCircle2,
   CircleX,
   Clock3,
+  KeyRound,
   Lightbulb,
   Printer,
   Trophy,
   X,
 } from 'lucide-react';
-import type { Submission } from '@/lib/types';
+import type { Exam, ExamAnswerKey, Submission } from '@/lib/types';
 import { EXTRA_KIND_LABELS, OPTION_LABELS } from '@/lib/types';
+import { loadExams } from '@/lib/storage';
+import { fetchExamFromCloud } from '@/lib/supabase';
 import { cn, formatNumber, isPending, progressPercent } from '@/lib/utils';
 
 type ExamResultProps = {
@@ -24,6 +27,39 @@ type ExamResultProps = {
 export function ExamResult({ submission, onBack }: ExamResultProps) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
+  const [answerKey, setAnswerKey] = useState<ExamAnswerKey | null>(null);
+
+  // Đáp án có thể được giáo viên công bố sau khi học sinh đã nộp bài,
+  // nên phải tải đề mới nhất từ máy chủ (dự phòng dữ liệu local).
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAnswerKey = async () => {
+      let cloudExam: Exam | null = null;
+      try {
+        cloudExam = await fetchExamFromCloud(submission.examId);
+      } catch (error) {
+        console.error('Không thể tải đáp án từ máy chủ:', error);
+      }
+      if (cancelled) return;
+      if (cloudExam?.answerKey) {
+        setAnswerKey(cloudExam.answerKey);
+        return;
+      }
+
+      const localExam =
+        typeof window !== 'undefined'
+          ? loadExams().find((exam) => exam.id === submission.examId)
+          : undefined;
+      if (!cancelled && localExam?.answerKey) setAnswerKey(localExam.answerKey);
+    };
+
+    void loadAnswerKey();
+    return () => {
+      cancelled = true;
+    };
+  }, [submission.examId]);
+
   const pending = isPending(submission.status);
   const shortAnswerDetails = submission.shortAnswerDetails || [];
   const shortAnswerScore = shortAnswerDetails.reduce((sum, detail) => sum + detail.score, 0);
@@ -489,6 +525,52 @@ export function ExamResult({ submission, onBack }: ExamResultProps) {
                   ) : null}
                 </div>
               ))}
+            </div>
+          </section>
+        ) : null}
+
+        {answerKey?.enabled && (answerKey.text.trim() || answerKey.images.length > 0) ? (
+          <section className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
+            <div className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50/70 p-4 sm:p-6">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
+                <KeyRound className="size-4" />
+              </span>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Đáp án của đề</h2>
+                <p className="text-xs font-medium text-slate-500">
+                  Đáp án đầy đủ do giáo viên công bố sau khi học sinh nộp bài.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4 p-4 sm:p-6">
+              {answerKey.text.trim() ? (
+                <div className="rounded-2xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200/70">
+                  <p className="whitespace-pre-line text-sm font-medium leading-relaxed text-slate-700">
+                    {answerKey.text}
+                  </p>
+                </div>
+              ) : null}
+
+              {answerKey.images.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {answerKey.images.map((image, index) => (
+                    <button
+                      key={`${index}-${image.slice(-24)}`}
+                      type="button"
+                      onClick={() => setPreviewImage(image)}
+                      className="flex h-40 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-1"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={image}
+                        alt={`Ảnh đáp án ${index + 1}`}
+                        className="max-h-full max-w-full rounded-lg object-contain"
+                      />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </section>
         ) : null}
